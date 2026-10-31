@@ -1,95 +1,103 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { CssBaseline, Paper, Stepper, Step, StepLabel, Typography, CircularProgress, Divider, Button } from '@material-ui/core';
-import { Link, useHistory } from 'react-router-dom';
+import { Link } from 'react-router-dom';
 
 import { commerce } from '../../../lib/commerce';
 import AddressForm from '../AddressForm';
 import PaymentForm from '../PaymentForm';
 import useStyles from './styles';
-import { v4 as uuidv4 } from 'uuid';
 
 const steps = ['Shipping address', 'Payment details'];
 
-const Checkout = ({ cart, onCaptureCheckout, order, error }) => {
+const Checkout = ({ cart, onCaptureCheckout }) => {
   const [checkoutToken, setCheckoutToken] = useState(null);
   const [activeStep, setActiveStep] = useState(0);
   const [shippingData, setShippingData] = useState({});
-  const [isFinished, setIsFinished] = useState(false)
+  const [order, setOrder] = useState(null);
+  const [error, setError] = useState('');
+  const [isUpdating, setIsUpdating] = useState(false);
+  const [tokenAttempt, setTokenAttempt] = useState(0);
+  const currentToken = useRef(null);
+  const updating = useRef(false);
   const classes = useStyles();
-  const history = useHistory();
-
-  const nextStep = () => setActiveStep((prevActiveStep) => prevActiveStep + 1);
-  const backStep = () => setActiveStep((prevActiveStep) => prevActiveStep - 1);
 
   useEffect(() => {
-    if (cart.id) {
-      const generateToken = async () => {
-        try {
-          const token = await commerce.checkout.generateToken(cart.id, { type: 'cart' });
+    if (!cart.id || order) return;
+    let active = true;
+    currentToken.current = null;
+    updating.current = false;
+    setCheckoutToken(null);
+    setActiveStep(0);
+    setShippingData({});
+    setError('');
+    setIsUpdating(false);
 
-          setCheckoutToken(token);
-        } catch {
-          if (activeStep !== steps.length) history.push('/');
-        }
-      };
+    const generateToken = async () => {
+      try {
+        const token = await commerce.checkout.generateToken(cart.id, { type: 'cart' });
+        if (!active) return;
+        currentToken.current = token.id;
+        setCheckoutToken(token);
+      } catch {
+        if (active) setError('Unable to start checkout. Please try again.');
+      }
+    };
 
-      generateToken();
-    }
-  }, [cart]);
+    generateToken();
+    return () => {
+      active = false;
+      currentToken.current = null;
+    };
+  }, [cart.id, order, tokenAttempt]);
 
-  const test = (data) => {
+  const submitShipping = async (data) => {
+    if (updating.current) return;
+    const tokenId = checkoutToken.id;
+    updating.current = true;
+    setIsUpdating(true);
+    setError('');
     setShippingData(data);
 
-    nextStep();
+    try {
+      const location = { country: data.shippingCountry };
+      if (data.shippingSubdivision) location.region = data.shippingSubdivision;
+      const shipping = await commerce.checkout.checkShippingOption(tokenId, {
+        shipping_option_id: data.shippingOption,
+        ...location,
+      });
+      if (currentToken.current !== tokenId) return;
+      if (!shipping.valid) throw new Error('This shipping option is no longer available. Please choose another option.');
+
+      // Commerce.js 2.2 updates the checkout when shipping and the tax zone are set.
+      // Use its final totals rather than adding locally formatted prices.
+      const tax = await commerce.checkout.setTaxZone(tokenId, {
+        ...location,
+        postal_zip_code: data.zip,
+      });
+      if (currentToken.current !== tokenId) return;
+      if (!tax.valid || !tax.live?.shipping?.price || !tax.live?.total_with_tax) {
+        throw new Error('Unable to calculate the order total. Please try again.');
+      }
+      setCheckoutToken((token) => ({ ...token, live: tax.live }));
+      setActiveStep(1);
+    } catch (error) {
+      if (currentToken.current === tokenId) {
+        const message = error?.data?.error?.message || error?.message;
+        setError(typeof message === 'string' ? message : 'Unable to calculate the order total. Please try again.');
+      }
+    } finally {
+      if (currentToken.current === tokenId) {
+        updating.current = false;
+        setIsUpdating(false);
+      }
+    }
   };
 
-  const timeout = () => {
-    setTimeout(() => {
-      setIsFinished(true)
-    }, 3000)
-  }
+  const completeOrder = (confirmedOrder) => {
+    setOrder(confirmedOrder);
+    setActiveStep(steps.length);
+  };
 
-  let Confirmation = () => (order.customer ? (
-    <>
-      <div>
-        <Typography variant="h5">Thank you for your purchase, {order.customer.firstname} {order.customer.lastname}!</Typography>
-        <Divider className={classes.divider} />
-        <Typography variant="subtitle2">Order ref: {order.customer_reference}</Typography>
-      </div>
-      <br />
-      <Button component={Link} variant="outlined" type="button" to="/">Back to home</Button>
-    </>
-  ) : isFinished ? (
-    <>
-      <div>
-        <Typography variant="h5">Thank you for your purchase!</Typography>
-        <Divider className={classes.divider} />
-        <Typography variant="subtitle2">Order ref: {uuidv4()}</Typography>
-      </div>
-      <br />
-      <Button component={Link} variant="outlined" type="button" to="/">Back to home</Button>
-    </>
-  ) : (
-    <div className={classes.spinner}>
-      <CircularProgress />
-    </div>
-  ));
-  if (error) {
-    Confirmation = () => (
-        <>
-            <div>
-                <Typography variant="h5">Thank you for your purchase!</Typography>
-                <Divider className={classes.divider} />
-                <Typography variant="subtitle2">Order ref: {uuidv4()}</Typography>
-            </div>
-            <br />
-            <Button component={Link} variant="outlined" type="button" to="/">Back to home</Button>
-        </>
-    );
-  }
-  const Form = () => (activeStep === 0
-    ? <AddressForm checkoutToken={checkoutToken} nextStep={nextStep} setShippingData={setShippingData} test={test} />
-    : <PaymentForm checkoutToken={checkoutToken} nextStep={nextStep} backStep={backStep} shippingData={shippingData} onCaptureCheckout={onCaptureCheckout} timeout={timeout} />);
   return (
     <>
       <CssBaseline />
@@ -98,16 +106,35 @@ const Checkout = ({ cart, onCaptureCheckout, order, error }) => {
         <Paper className={classes.paper}>
           <Typography variant="h4" align="center">Checkout</Typography>
           <Stepper activeStep={activeStep} className={classes.stepper}>
-            {steps.map((label) => (
-              <Step key={label}>
-                <StepLabel>{label}</StepLabel>
-              </Step>
-            ))}
+            {steps.map((label) => <Step key={label}><StepLabel>{label}</StepLabel></Step>)}
           </Stepper>
-          {activeStep === steps.length ? <Confirmation /> : checkoutToken && <Form />}
+          {order ? (
+            <>
+              <Typography variant="h5">Thank you for your purchase{order.customer?.firstname ? `, ${order.customer.firstname}` : ''}!</Typography>
+              <Divider className={classes.divider} />
+              <Typography variant="subtitle2">Order ref: {order.customer_reference || order.id}</Typography>
+              <br />
+              <Button component={Link} variant="outlined" to="/">Back to home</Button>
+            </>
+          ) : checkoutToken ? (
+            activeStep === 0 ? (
+              <AddressForm checkoutToken={checkoutToken} shippingData={shippingData} onSubmit={submitShipping} isSubmitting={isUpdating} error={error} />
+            ) : (
+              <PaymentForm checkoutToken={checkoutToken} backStep={() => setActiveStep(0)} shippingData={shippingData} onCaptureCheckout={onCaptureCheckout} onComplete={completeOrder} />
+            )
+          ) : error ? (
+            <>
+              <Typography role="alert" color="error">{error}</Typography>
+              <Button onClick={() => setTokenAttempt((attempt) => attempt + 1)}>Retry checkout</Button>
+              <Button component={Link} to="/cart">Back to cart</Button>
+            </>
+          ) : (
+            <div className={classes.spinner}><CircularProgress aria-label="Loading checkout" /></div>
+          )}
         </Paper>
       </main>
     </>
   );
 };
+
 export default Checkout;
