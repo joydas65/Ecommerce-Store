@@ -1,4 +1,3 @@
-import React from 'react';
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import '@testing-library/jest-dom';
 
@@ -7,7 +6,7 @@ import PaymentForm from './PaymentForm';
 const mockStripe = { createPaymentMethod: jest.fn() };
 const mockElements = { getElement: jest.fn() };
 
-jest.mock('@stripe/stripe-js', () => ({ loadStripe: jest.fn(() => Promise.resolve({})) }));
+jest.mock('@stripe/stripe-js/pure', () => ({ loadStripe: jest.fn(() => Promise.resolve({})) }));
 jest.mock('@stripe/react-stripe-js', () => ({
   Elements: ({ children }) => children,
   CardElement: () => null,

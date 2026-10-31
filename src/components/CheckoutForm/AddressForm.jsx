@@ -1,14 +1,16 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { InputLabel, Select, MenuItem, Button, Grid, Typography } from '@material-ui/core';
+'use client';
+
+import { useState, useEffect } from 'react';
+import { InputLabel, Select, MenuItem, Button, Grid, Typography } from '@mui/material';
 import { useForm, FormProvider } from 'react-hook-form';
-import { Link } from 'react-router-dom';
+import Link from 'next/link';
 
 import { commerce } from '../../lib/commerce';
 import FormInput from './CustomTextField';
 
 const AddressForm = ({ checkoutToken, shippingData = {}, onSubmit, isSubmitting = false, error = '' }) => {
-  const savedAddress = useRef(shippingData).current;
-  const [countries, setCountries] = useState({ choices: {}, loading: true, error: '' });
+  const [savedAddress] = useState(shippingData);
+  const [countries, setCountries] = useState({ requestKey: null, choices: {}, error: '' });
   const [shippingCountry, setShippingCountry] = useState('');
   const [regions, setRegions] = useState(null);
   const [options, setOptions] = useState(null);
@@ -17,33 +19,36 @@ const AddressForm = ({ checkoutToken, shippingData = {}, onSubmit, isSubmitting 
     defaultValues: { firstName: '', lastName: '', address1: '', email: '', city: '', zip: '', ...shippingData },
   });
   const submitting = isSubmitting || methods.formState.isSubmitting;
+  const countriesRequestKey = `${checkoutToken.id}:${retryCount}`;
+  const countriesCurrent = countries.requestKey === countriesRequestKey;
+  const countriesLoading = !countriesCurrent;
+  const regionsRequestKey = `${countriesRequestKey}:${shippingCountry}`;
 
   useEffect(() => {
     let active = true;
-    setCountries({ choices: {}, loading: true, error: '' });
-    setShippingCountry('');
 
     const loadCountries = async () => {
       try {
         const { countries: choices } = await commerce.services.localeListShippingCountries(checkoutToken.id);
         if (!active) return;
         const codes = Object.keys(choices);
-        setCountries({ choices, loading: false, error: codes.length ? '' : 'No shipping destinations are available.' });
+        setCountries({ requestKey: countriesRequestKey, choices, error: codes.length ? '' : 'No shipping destinations are available.' });
         setShippingCountry(codes.includes(savedAddress.shippingCountry) ? savedAddress.shippingCountry : codes[0] || '');
       } catch {
-        if (active) setCountries({ choices: {}, loading: false, error: 'Unable to load shipping countries. Please try again.' });
+        if (active) {
+          setCountries({ requestKey: countriesRequestKey, choices: {}, error: 'Unable to load shipping countries. Please try again.' });
+          setShippingCountry('');
+        }
       }
     };
 
     loadCountries();
     return () => { active = false; };
-  }, [checkoutToken.id, savedAddress, retryCount]);
+  }, [checkoutToken.id, savedAddress, countriesRequestKey]);
 
   useEffect(() => {
     let active = true;
-    setRegions(null);
-    setOptions(null);
-    if (!shippingCountry) return () => { active = false; };
+    if (!countriesCurrent || !shippingCountry) return () => { active = false; };
 
     const loadRegions = async () => {
       try {
@@ -52,28 +57,29 @@ const AddressForm = ({ checkoutToken, shippingData = {}, onSubmit, isSubmitting 
         const codes = Object.keys(choices);
         const savedRegion = shippingCountry === savedAddress.shippingCountry && savedAddress.shippingSubdivision;
         setRegions({
+          requestKey: regionsRequestKey,
           country: shippingCountry,
           choices,
           selected: codes.includes(savedRegion) ? savedRegion : codes[0] || '',
           error: '',
         });
       } catch {
-        if (active) setRegions({ country: shippingCountry, choices: {}, selected: '', error: 'Unable to load shipping regions. Please try again.' });
+        if (active) setRegions({ requestKey: regionsRequestKey, country: shippingCountry, choices: {}, selected: '', error: 'Unable to load shipping regions. Please try again.' });
       }
     };
 
     loadRegions();
     return () => { active = false; };
-  }, [shippingCountry, savedAddress]);
+  }, [shippingCountry, savedAddress, regionsRequestKey, countriesCurrent]);
 
-  const regionsCountry = regions && regions.country;
-  const shippingSubdivision = regions ? regions.selected : '';
-  const regionsError = regions && regions.error;
+  const regionsCurrent = regions?.requestKey === regionsRequestKey;
+  const shippingSubdivision = regionsCurrent ? regions.selected : '';
+  const regionsError = regionsCurrent && regions.error;
+  const optionsRequestKey = `${regionsRequestKey}:${shippingSubdivision}`;
 
   useEffect(() => {
     let active = true;
-    setOptions(null);
-    if (!shippingCountry || regionsCountry !== shippingCountry || regionsError) return () => { active = false; };
+    if (!countriesCurrent || !shippingCountry || !regionsCurrent || regionsError) return () => { active = false; };
 
     const loadOptions = async () => {
       try {
@@ -85,6 +91,7 @@ const AddressForm = ({ checkoutToken, shippingData = {}, onSubmit, isSubmitting 
           && shippingSubdivision === (savedAddress.shippingSubdivision || '')
           && savedAddress.shippingOption;
         setOptions({
+          requestKey: optionsRequestKey,
           country: shippingCountry,
           region: shippingSubdivision,
           choices,
@@ -92,20 +99,19 @@ const AddressForm = ({ checkoutToken, shippingData = {}, onSubmit, isSubmitting 
           error: choices.length ? '' : 'No shipping options are available for this address.',
         });
       } catch {
-        if (active) setOptions({ country: shippingCountry, region: shippingSubdivision, choices: [], selected: '', error: 'Unable to load shipping options. Please try again.' });
+        if (active) setOptions({ requestKey: optionsRequestKey, country: shippingCountry, region: shippingSubdivision, choices: [], selected: '', error: 'Unable to load shipping options. Please try again.' });
       }
     };
 
     loadOptions();
     return () => { active = false; };
-  }, [checkoutToken.id, shippingCountry, shippingSubdivision, regionsCountry, regionsError, savedAddress]);
+  }, [checkoutToken.id, shippingCountry, shippingSubdivision, regionsCurrent, regionsError, savedAddress, countriesCurrent, optionsRequestKey]);
 
-  const regionsCurrent = regions && regions.country === shippingCountry;
-  const optionsCurrent = options && options.country === shippingCountry && options.region === shippingSubdivision;
-  const ready = !countries.loading && !!countries.choices[shippingCountry] && regionsCurrent && !regions.error
+  const optionsCurrent = options?.requestKey === optionsRequestKey;
+  const ready = !countriesLoading && !!countries.choices[shippingCountry] && regionsCurrent && !regions.error
     && optionsCurrent && options.choices.some((option) => option.id === options.selected);
-  const loading = countries.loading || (shippingCountry && (!regionsCurrent || (!regions.error && !optionsCurrent)));
-  const shippingError = countries.error || (regionsCurrent && regions.error) || (optionsCurrent && options.error);
+  const loading = countriesLoading || (shippingCountry && (!regionsCurrent || (!regions.error && !optionsCurrent)));
+  const shippingError = (countriesCurrent && countries.error) || (regionsCurrent && regions.error) || (optionsCurrent && options.error);
 
   return (
     <>
@@ -123,9 +129,9 @@ const AddressForm = ({ checkoutToken, shippingData = {}, onSubmit, isSubmitting 
             <FormInput required name="email" label="Email" type="email" disabled={submitting} />
             <FormInput required name="city" label="City" disabled={submitting} />
             <FormInput required name="zip" label="Zip / Postal code" disabled={submitting} />
-            <Grid item xs={12} sm={6}>
+            <Grid size={{ xs: 12, sm: 6 }}>
               <InputLabel id="shipping-country-label">Shipping Country</InputLabel>
-              <Select labelId="shipping-country-label" id="shipping-country" value={shippingCountry} fullWidth disabled={countries.loading || submitting} onChange={(event) => {
+              <Select labelId="shipping-country-label" id="shipping-country" value={shippingCountry} fullWidth disabled={countriesLoading || submitting} onChange={(event) => {
                 setShippingCountry(event.target.value);
                 setRegions(null);
                 setOptions(null);
@@ -136,7 +142,7 @@ const AddressForm = ({ checkoutToken, shippingData = {}, onSubmit, isSubmitting 
               </Select>
             </Grid>
             {regionsCurrent && Object.keys(regions.choices).length > 0 && (
-              <Grid item xs={12} sm={6}>
+              <Grid size={{ xs: 12, sm: 6 }}>
                 <InputLabel id="shipping-region-label">Shipping Subdivision</InputLabel>
                 <Select labelId="shipping-region-label" id="shipping-region" value={shippingSubdivision} fullWidth disabled={submitting} onChange={(event) => {
                   setRegions({ ...regions, selected: event.target.value });
@@ -148,7 +154,7 @@ const AddressForm = ({ checkoutToken, shippingData = {}, onSubmit, isSubmitting 
                 </Select>
               </Grid>
             )}
-            <Grid item xs={12} sm={6}>
+            <Grid size={{ xs: 12, sm: 6 }}>
               <InputLabel id="shipping-option-label">Shipping Options</InputLabel>
               <Select labelId="shipping-option-label" id="shipping-option" value={optionsCurrent ? options.selected : ''} fullWidth disabled={!ready || submitting} onChange={(event) => setOptions({ ...options, selected: event.target.value })}>
                 {(optionsCurrent ? options.choices : []).map((option) => (
@@ -162,7 +168,7 @@ const AddressForm = ({ checkoutToken, shippingData = {}, onSubmit, isSubmitting 
           {shippingError && <Button type="button" onClick={() => setRetryCount((count) => count + 1)} disabled={submitting}>Retry shipping</Button>}
           <br />
           <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-            <Button component={Link} variant="outlined" to="/cart" disabled={submitting}>Back to Cart</Button>
+            <Button component={Link} variant="outlined" href="/cart" disabled={submitting}>Back to Cart</Button>
             <Button type="submit" variant="contained" color="primary" disabled={!ready || submitting}>{submitting ? 'Updating total…' : 'Next'}</Button>
           </div>
         </form>

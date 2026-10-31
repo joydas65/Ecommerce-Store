@@ -1,7 +1,5 @@
-import React from 'react';
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import '@testing-library/jest-dom';
-import { MemoryRouter } from 'react-router-dom';
 
 import AddressForm from './AddressForm';
 import { commerce } from '../../lib/commerce';
@@ -24,9 +22,7 @@ const savedAddress = {
 };
 
 const renderForm = (props = {}) => render(
-  <MemoryRouter>
-    <AddressForm checkoutToken={{ id: 'checkout-token' }} onSubmit={jest.fn()} {...props} />
-  </MemoryRouter>,
+  <AddressForm checkoutToken={{ id: 'checkout-token' }} onSubmit={jest.fn()} {...props} />,
 );
 
 const selectCountry = (name) => {

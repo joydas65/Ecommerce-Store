@@ -1,29 +1,27 @@
-import { makeStyles } from '@material-ui/core/styles';
-
-export default makeStyles((theme) => ({
-  toolbar: theme.mixins.toolbar,
+const styles = {
+  toolbar: (theme) => theme.mixins.toolbar,
   title: {
-    marginTop: '5%',
+    mt: '5%',
+    fontSize: { xs: '2rem', sm: '3rem' },
   },
-  emptyButton: {
+  actionButton: {
     minWidth: '150px',
-    [theme.breakpoints.down('xs')]: {
-      marginBottom: '5px',
-    },
-    [theme.breakpoints.up('xs')]: {
-      marginRight: '20px',
-    },
+    width: { xs: '100%', sm: 'auto' },
   },
-  checkoutButton: {
-    minWidth: '150px',
-  },
-  link: {
-    textDecoration: 'none',
+  actions: {
+    display: 'flex',
+    flexWrap: 'wrap',
+    gap: 2,
   },
   cardDetails: {
     display: 'flex',
-    marginTop: '10%',
+    flexWrap: 'wrap',
+    mt: '10%',
+    mb: 3,
     width: '100%',
     justifyContent: 'space-between',
+    gap: 3,
   },
-}));
+};
+
+export default styles;

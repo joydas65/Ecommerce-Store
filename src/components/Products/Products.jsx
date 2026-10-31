@@ -1,22 +1,21 @@
-import React from 'react'
-import { Grid } from '@material-ui/core'
-import Product from './Product/Product'
-import useStyles from './styles'
+'use client';
 
-const Products = ({ products, onAddToCart }) => {
-    const classes = useStyles()
-    return (
-        <main className={classes.content}>
-            <div className={classes.toolbar} />
-            <Grid container justify="center" spacing={4}>
-                {products.map((product) => (
-                    <Grid item key={product.id} xs={12} sm={6} md={4} lg={3}>
-                        <Product product={product} onAddToCart={onAddToCart} />
-                    </Grid>
-                ))}
-            </Grid>
-        </main>
-    )
-}
+import { Box, Grid } from '@mui/material';
 
-export default Products
+import Product from './Product/Product';
+import styles from './styles';
+
+const Products = ({ products, onAddToCart, isUpdating = false }) => (
+  <Box component="main" sx={styles.content}>
+    <Box sx={styles.toolbar} />
+    <Grid container justifyContent="center" spacing={4}>
+      {products.map((product) => (
+        <Grid key={product.id} size={{ xs: 12, sm: 6, md: 4, lg: 3 }}>
+          <Product product={product} onAddToCart={onAddToCart} isUpdating={isUpdating} />
+        </Grid>
+      ))}
+    </Grid>
+  </Box>
+);
+
+export default Products;

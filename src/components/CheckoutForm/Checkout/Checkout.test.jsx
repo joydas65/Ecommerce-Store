@@ -1,7 +1,6 @@
 import React from 'react';
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import '@testing-library/jest-dom';
-import { MemoryRouter } from 'react-router-dom';
 
 import Checkout from './Checkout';
 import { commerce } from '../../../lib/commerce';
@@ -23,23 +22,24 @@ jest.mock('../../../lib/commerce', () => ({
     },
   },
 }));
-jest.mock('@stripe/stripe-js', () => ({ loadStripe: jest.fn(() => Promise.resolve({})) }));
+jest.mock('@stripe/stripe-js/pure', () => ({ loadStripe: jest.fn(() => Promise.resolve({})) }));
 jest.mock('@stripe/react-stripe-js', () => ({
   Elements: ({ children }) => children,
   CardElement: () => null,
   ElementsConsumer: ({ children }) => children({ stripe: mockStripe, elements: mockElements }),
 }));
 jest.mock('../AddressForm', () => {
-  const React = require('react');
-  return ({ onSubmit, isSubmitting, error, shippingData }) => (
-    <div>
-      <span>Saved shipping: {shippingData.shippingOption || 'none'}</span>
-      {error && <div role="alert">{error}</div>}
-      <button disabled={isSubmitting} onClick={() => onSubmit(mockAddress)}>Continue with standard shipping</button>
-      <button disabled={isSubmitting} onClick={() => onSubmit({ ...mockAddress, shippingOption: 'ship_express' })}>Continue with express shipping</button>
-      <button disabled={isSubmitting} onClick={() => onSubmit({ ...mockAddress, shippingCountry: 'SG', shippingSubdivision: '', zip: '123456' })}>Continue without a region</button>
-    </div>
-  );
+  return function MockAddressForm({ onSubmit, isSubmitting, error, shippingData }) {
+    return (
+      <div>
+        <span>Saved shipping: {shippingData.shippingOption || 'none'}</span>
+        {error && <div role="alert">{error}</div>}
+        <button disabled={isSubmitting} onClick={() => onSubmit(mockAddress)}>Continue with standard shipping</button>
+        <button disabled={isSubmitting} onClick={() => onSubmit({ ...mockAddress, shippingOption: 'ship_express' })}>Continue with express shipping</button>
+        <button disabled={isSubmitting} onClick={() => onSubmit({ ...mockAddress, shippingCountry: 'SG', shippingSubdivision: '', zip: '123456' })}>Continue without a region</button>
+      </div>
+    );
+  };
 });
 
 const money = (raw) => ({ raw, formatted_with_symbol: `$${raw.toFixed(2)}` });
@@ -71,7 +71,7 @@ const deferred = () => {
 
 const renderCheckout = (overrides = {}) => {
   const props = { cart: { id: 'cart_123' }, onCaptureCheckout: jest.fn().mockResolvedValue(order), ...overrides };
-  const result = render(<MemoryRouter><Checkout {...props} /></MemoryRouter>);
+  const result = render(<Checkout {...props} />);
   return { ...result, ...props };
 };
 
@@ -239,7 +239,7 @@ test('keeps the confirmed order visible when the cart is refreshed', async () =>
   fireEvent.click(await continueToPayment());
   await screen.findByText('Order ref: ORDER-123');
 
-  props.rerender(<MemoryRouter><Checkout cart={{ id: 'cart_new' }} onCaptureCheckout={props.onCaptureCheckout} /></MemoryRouter>);
+  props.rerender(<Checkout cart={{ id: 'cart_new' }} onCaptureCheckout={props.onCaptureCheckout} />);
 
   expect(screen.getByText('Order ref: ORDER-123')).toBeInTheDocument();
   expect(screen.getByText('Thank you for your purchase, Joy!')).toBeInTheDocument();
@@ -263,7 +263,7 @@ test('preserves confirmation when cart clearing and refresh resolve alongside or
     return <Checkout cart={cart} onCaptureCheckout={captureOrder} />;
   };
 
-  render(<MemoryRouter><CheckoutWithCartRefresh /></MemoryRouter>);
+  render(<CheckoutWithCartRefresh />);
   fireEvent.click(await continueToPayment());
   await waitFor(() => expect(mockStripe.createPaymentMethod).toHaveBeenCalledTimes(1));
   await act(async () => capture.resolve(order));

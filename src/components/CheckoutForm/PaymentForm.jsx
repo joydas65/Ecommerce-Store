@@ -1,11 +1,14 @@
-import React, { useRef, useState } from 'react';
-import { Typography, Button, Divider } from '@material-ui/core';
+'use client';
+
+import { useRef, useState } from 'react';
+import { Typography, Button, Divider } from '@mui/material';
 import { Elements, CardElement, ElementsConsumer } from '@stripe/react-stripe-js';
-import { loadStripe } from '@stripe/stripe-js';
+import { loadStripe } from '@stripe/stripe-js/pure';
 
 import Review from './Review';
 
-const stripePromise = loadStripe(process.env.REACT_APP_STRIPE_PUBLIC_KEY);
+const publishableKey = process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY;
+const stripePromise = publishableKey ? loadStripe(publishableKey) : null;
 
 const PaymentForm = ({ checkoutToken, backStep, shippingData, onCaptureCheckout, onComplete }) => {
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -15,7 +18,7 @@ const PaymentForm = ({ checkoutToken, backStep, shippingData, onCaptureCheckout,
   const handleSubmit = async (event, elements, stripe) => {
     event.preventDefault();
 
-    if (!stripe || !elements || submitting.current) return;
+    if (!stripePromise || !stripe || !elements || submitting.current) return;
 
     submitting.current = true;
     setIsSubmitting(true);
@@ -56,7 +59,10 @@ const PaymentForm = ({ checkoutToken, backStep, shippingData, onCaptureCheckout,
     <>
       <Review checkoutToken={checkoutToken} />
       <Divider />
-      <Typography variant="h6" gutterBottom style={{ margin: '20px 0' }}>Payment method</Typography>
+      <Typography variant="h6" gutterBottom sx={{ my: 2.5 }}>Payment method</Typography>
+      {!stripePromise && (
+        <Typography color="error" role="alert">Payments are temporarily unavailable. Please try again later.</Typography>
+      )}
       <Elements stripe={stripePromise}>
         <ElementsConsumer>{({ elements, stripe }) => (
           <form onSubmit={(e) => handleSubmit(e, elements, stripe)} aria-busy={isSubmitting}>
@@ -65,7 +71,7 @@ const PaymentForm = ({ checkoutToken, backStep, shippingData, onCaptureCheckout,
             <br /> <br />
             <div style={{ display: 'flex', justifyContent: 'space-between' }}>
               <Button variant="outlined" onClick={backStep} disabled={isSubmitting}>Back</Button>
-              <Button type="submit" variant="contained" disabled={!stripe || !elements || isSubmitting} color="primary">
+              <Button type="submit" variant="contained" disabled={!stripePromise || !stripe || !elements || isSubmitting} color="primary">
                 {isSubmitting ? 'Processing payment…' : `Pay ${checkoutToken.live.total_with_tax.formatted_with_symbol}`}
               </Button>
             </div>

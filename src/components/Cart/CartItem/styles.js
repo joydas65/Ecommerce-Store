@@ -1,18 +1,22 @@
-import { makeStyles } from '@material-ui/core/styles';
-
-export default makeStyles(() => ({
+const styles = {
   media: {
     height: 260,
+    objectFit: 'cover',
   },
   cardContent: {
     display: 'flex',
     justifyContent: 'space-between',
+    gap: 1,
   },
-  cartActions: {
+  cardActions: {
     justifyContent: 'space-between',
+    flexWrap: 'wrap',
+    gap: 1,
   },
   buttons: {
     display: 'flex',
     alignItems: 'center',
   },
-}));
+};
+
+export default styles;

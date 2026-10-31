@@ -1,7 +1,5 @@
-import React from 'react';
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import '@testing-library/jest-dom';
-import { MemoryRouter } from 'react-router-dom';
 
 import Checkout from './Checkout';
 import { commerce } from '../../../lib/commerce';
@@ -23,7 +21,7 @@ jest.mock('../../../lib/commerce', () => ({
     },
   },
 }));
-jest.mock('@stripe/stripe-js', () => ({ loadStripe: jest.fn(() => Promise.resolve({})) }));
+jest.mock('@stripe/stripe-js/pure', () => ({ loadStripe: jest.fn(() => Promise.resolve({})) }));
 jest.mock('@stripe/react-stripe-js', () => ({
   Elements: ({ children }) => children,
   CardElement: () => null,
@@ -54,7 +52,7 @@ test('completes the real address and payment forms, preserving input on Back and
   let resolveCapture;
   const onCaptureCheckout = jest.fn(() => new Promise((resolve) => { resolveCapture = resolve; }));
 
-  render(<MemoryRouter><Checkout cart={{ id: 'cart_123' }} onCaptureCheckout={onCaptureCheckout} /></MemoryRouter>);
+  render(<Checkout cart={{ id: 'cart_123' }} onCaptureCheckout={onCaptureCheckout} />);
 
   await screen.findByLabelText(/First name/);
   const addressFields = [

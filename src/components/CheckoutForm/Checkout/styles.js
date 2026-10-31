@@ -1,52 +1,30 @@
-import { makeStyles } from '@material-ui/core/styles';
-
-export default makeStyles((theme) => ({
-  appBar: {
-    position: 'relative',
-  },
-  toolbar: theme.mixins.toolbar,
+const styles = {
+  toolbar: (theme) => theme.mixins.toolbar,
   layout: {
-    marginTop: '5%',
-    width: 'auto',
-    marginLeft: theme.spacing(2),
-    marginRight: theme.spacing(2),
-    [theme.breakpoints.up(600 + theme.spacing(2) * 2)]: {
-      width: 600,
-      marginLeft: 'auto',
-      marginRight: 'auto',
-    },
+    width: '100%',
+    maxWidth: 600,
+    mx: 'auto',
+    px: { xs: 2, sm: 0 },
+    mt: { xs: 3, sm: 5 },
+    mb: 3,
   },
   paper: {
-    marginTop: theme.spacing(3),
-    marginBottom: theme.spacing(3),
-    padding: theme.spacing(2),
-    [theme.breakpoints.down('xs')]: {
-      width: '100%',
-      marginTop: 60,
-    },
-    [theme.breakpoints.up(600 + theme.spacing(3) * 2)]: {
-      marginTop: theme.spacing(6),
-      marginBottom: theme.spacing(6),
-      padding: theme.spacing(3),
-    },
+    mt: 3,
+    mb: 3,
+    p: { xs: 2, sm: 3 },
   },
   stepper: {
-    padding: theme.spacing(3, 0, 5),
-  },
-  buttons: {
-    display: 'flex',
-    justifyContent: 'flex-end',
-  },
-  button: {
-    marginTop: theme.spacing(3),
-    marginLeft: theme.spacing(1),
+    pt: 3,
+    pb: 5,
   },
   divider: {
-    margin: '20px 0',
+    my: 2.5,
   },
   spinner: {
     display: 'flex',
     justifyContent: 'center',
     alignItems: 'center',
   },
-}));
+};
+
+export default styles;
