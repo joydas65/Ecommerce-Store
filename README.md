@@ -16,6 +16,7 @@ The [Vercel release guide](docs/deployment.md) documents deployment checks, proj
 - Directly linked product pages with server-rendered descriptions, sample specifications and care guidance, individual page metadata, and loading, missing-product, and service-recovery states.
 - Responsive product cards and cart quantity, removal, and clearing actions.
 - A workspace-inspired storefront, shared visual theme, visible add actions, and confirmed cart feedback with a direct View cart action.
+- Search names, descriptions, and sample specifications; sort by featured order, price, or name. Share `q`/`sort` URLs, restore results with browser history, and recover from empty results.
 - Keyboard navigation, a skip link, and verified catalog layouts at phone, tablet, and desktop widths.
 - Six seeded products with local illustrations, a cart that survives reloads, sample address entry, and simulated order confirmations.
 - A controlled payment failure that preserves the cart and lets the shopper retry.
@@ -62,7 +63,7 @@ The demo provider uses integer cents, $5 standard or $12 express shipping, and a
 
 The SDK’s Axios dependency is pinned to the patched 0.34.0 release through a scoped override. Contract tests cover the request and response shapes used by this app.
 
-In live mode, the browser passes a Stripe payment-method identifier to Commerce.js for order capture. Decision records explain the [framework foundation](docs/decisions/0001-next-foundation.md), [demo provider boundary](docs/decisions/0002-seeded-demo.md), [catalog-to-cart experience](docs/decisions/0003-catalog-to-cart-experience.md), and [product page boundaries](docs/decisions/0004-product-detail-pages.md), including screenshots.
+In live mode, the browser passes a Stripe payment-method identifier to Commerce.js for order capture. Decision records explain the [framework foundation](docs/decisions/0001-next-foundation.md), [demo provider boundary](docs/decisions/0002-seeded-demo.md), [catalog-to-cart experience](docs/decisions/0003-catalog-to-cart-experience.md), [product page boundaries](docs/decisions/0004-product-detail-pages.md), and [URL-driven catalog discovery](docs/decisions/0005-catalog-discovery.md), including screenshots.
 
 ## Run locally
 
@@ -82,6 +83,10 @@ Open [localhost:3000](http://localhost:3000). **No environment file, merchant ac
 3. Review the shipping and sample tax, then choose **Place demo order**. One Desk Mat with standard shipping totals **$42.12**.
 4. Optionally select **Simulate a payment failure** before submitting. The first attempt shows an error and preserves the cart; the next attempt completes normally.
 5. The confirmation has a `DEMO-` reference. No payment is collected and nothing is shipped. Return to the catalog to repeat; **Empty Cart** clears a saved cart.
+
+### Share a collection view
+
+Try [desk products sorted by price](https://joys-store.vercel.app/?q=desk&sort=price-asc#products). Search is applied with **Search** or Enter; sorting applies immediately. **Clear search** keeps the sort, while **Reset filters** restores the featured collection. Reloading, copying the URL, and browser Back/Forward restore the applied view.
 
 ### Optional live mode
 
@@ -131,9 +136,9 @@ Alternatively, use an already installed Google Chrome:
 PLAYWRIGHT_CHANNEL=chrome npm run test:e2e
 ```
 
-The Jest suite covers confirmed and failed captures, slow responses, duplicate submissions, cart preservation, shipping/tax calculations, lookup failures, stale responses, and address restoration. Product tests cover independent reads, merchant response validation, missing versus unavailable states, metadata, loading UI, and confirmed purchase feedback. Demo provider tests also cover persisted cart validation, stale checkout rejection, failure recovery, and repeated capture. Provider selection tests prevent implicit live mode or simulated fallbacks. Component tests mock provider interactions. SDK contract tests use the real Commerce.js and Axios packages with an injected in-memory HTTP adapter. No test charges a card or proves live provider integration correctness.
+The Jest suite covers confirmed and failed captures, slow responses, duplicate submissions, cart preservation, shipping/tax calculations, lookup failures, stale responses, and address restoration. Product tests cover independent reads, merchant response validation, missing versus unavailable states, metadata, loading UI, and confirmed purchase feedback. Discovery tests cover query normalization, shared URL behavior, literal matching, deterministic numeric sorting, draft input, and empty-state recovery. Demo provider tests also cover persisted cart validation, stale checkout rejection, failure recovery, and repeated capture. Provider selection tests prevent implicit live mode or simulated fallbacks. Component tests mock provider interactions. SDK contract tests use the real Commerce.js and Axios packages with an injected in-memory HTTP adapter. No test charges a card or proves live provider integration correctness.
 
-Playwright uses the real demo implementation to exercise catalog-to-detail navigation, all six product deep links and reloads, server content with JavaScript disabled, product HTTP 404 recovery, mobile keyboard use, cart mutations and reloads, shipping totals, completed purchases, and controlled failure recovery. It rejects off-origin HTTP requests, uncaught errors, and hydration errors in demo mode. A separate production build verifies live-mode unavailable states, direct navigation/reloads, and the not-found page without merchant keys. Reports for each mode are kept separately.
+Playwright uses the real demo implementation to exercise shared searches, sorting, browser history, empty-state recovery, catalog-to-detail navigation, all six product deep links and reloads, server content with JavaScript disabled, product HTTP 404 recovery, mobile keyboard use, cart mutations and reloads, shipping totals, completed purchases, and controlled failure recovery. It rejects off-origin HTTP requests, uncaught errors, and hydration errors in demo mode. A separate production build verifies live-mode unavailable states, direct navigation/reloads, and the not-found page without merchant keys. Reports for each mode are kept separately.
 
 [GitHub Actions](.github/workflows/ci.yml) runs lint, Jest, release-event validation, and production Playwright checks on pushes and pull requests. The [deployment workflow](.github/workflows/deployment-checks.yml) verifies Vercel's built demo before native Deployment Checks permit production promotion. Browser reports are retained as seven-day workflow artifacts. No merchant credentials are required by CI; see the [release guide](docs/deployment.md) for the external Vercel settings needed to enable the gate.
 
@@ -146,17 +151,18 @@ Each milestone should leave a working, demonstrable application. Scope is one st
 | 1a. Project foundation | Implemented: maintained runtime, Next.js routes, npm lockfile, modern UI dependencies, and automated checks | Reproducibility, framework boundaries, migration safety |
 | 1b. Reproducible purchasing demo | Implemented: seeded products, explicit simulation mode, simulated purchases, and controlled failure recovery | Provider interfaces, deterministic testing, integration design |
 | 1c. Vercel release foundation | Deployed: Git integration, previews, CI and deployed purchase gates, release identity, and recovery instructions | Deployment safety, least-privilege automation, verifiable releases |
-| 2. Complete shopper experience | Catalog branding, responsive cards, keyboard access, confirmed add feedback, and directly linked product detail pages implemented; discovery remains planned | Product judgment, accessibility, frontend architecture |
+| 2. Complete shopper experience | Catalog branding, responsive cards, keyboard access, confirmed add feedback, directly linked product detail pages, and search/sorting with shareable URLs implemented | Product judgment, accessibility, frontend architecture |
 | 3. Full-stack order workflow | Planned: application API and database, authoritative price/availability checks, persisted orders, and authenticated merchant order management | Data modeling, authorization, concurrency, transaction boundaries |
 | 4. Reliable operation | Planned: duplicate-safe processing, provider reconciliation, deeper browser/API tests, structured diagnostics, and recovery instructions | Failure handling, observability, security, operating a service |
 | 5. Interview presentation | Hosted demo and decision records available; a polished walkthrough, screenshots, and broader measured results remain planned | Explaining tradeoffs and supporting claims with evidence |
 
-### Next milestone: product discovery
+### Next milestone: full-stack order workflow
 
-Add focused search and sorting with shareable URL state, useful empty results, and keyboard-accessible controls. Keep the scope proportionate to the small collection before expanding the catalog.
+Establish an application API and persistent order model, with authoritative prices and totals and a bounded merchant workflow. Keep simulated orders explicit while demonstrating transaction boundaries and recovery across browser sessions.
 
 ## Current limits
 
+- Search and sorting operate on the loaded collection. All six demo products are included; live merchant pagination and server-side full-catalog search remain future work.
 - The demo is browser-local. It does not reserve stock, process money, persist real orders, or synchronize accounts across devices.
 - Checkout tokens and simulated confirmations live in memory. Reloading checkout starts again with the saved cart; reloading a completed order shows the now-empty cart.
 - Live shipping and tax amounts come from Commerce.js; demo totals use the documented sample rules.

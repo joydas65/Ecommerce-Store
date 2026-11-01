@@ -2,7 +2,7 @@
 
 import { useRef, useState } from 'react';
 
-export default function useAddToCart(onAddToCart, isUpdating) {
+export default function useAddToCart(onAddToCart, isUpdating, onFocusFallback) {
   const activeAdd = useRef(false);
   const lastAddButton = useRef(null);
   const [addingId, setAddingId] = useState(null);
@@ -29,7 +29,8 @@ export default function useAddToCart(onAddToCart, isUpdating) {
 
   const dismiss = () => {
     setAdded(null);
-    lastAddButton.current?.focus();
+    if (lastAddButton.current?.isConnected) lastAddButton.current.focus();
+    else onFocusFallback?.();
   };
 
   return { addProduct, addingId, added, unexpectedError, dismiss };

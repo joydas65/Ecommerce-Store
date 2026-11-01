@@ -2,27 +2,9 @@ import 'server-only';
 import { cache } from 'react';
 import { isDemoMode } from './commerce-mode';
 import { catalog, productDetails } from './demo/catalog';
+import { plainProductText } from './product-text';
 
 const validIdentifier = (value) => typeof value === 'string' && /^[A-Za-z0-9_-]{1,128}$/.test(value);
-
-// Merchant descriptions may contain HTML. These values are rendered as text,
-// never as HTML; removing markup also keeps metadata readable without a DOM.
-const plainText = (value) => {
-  if (typeof value !== 'string') return '';
-  const entities = { amp: '&', quot: '"', apos: "'", lt: '<', gt: '>', nbsp: ' ' };
-  return value
-    .replace(/<(script|style)\b[^>]*>[\s\S]*?<\/\1\s*>/gi, ' ')
-    .replace(/<[^>]*>/g, ' ')
-    .replace(/&(#x[\da-f]+|#\d+|amp|quot|apos|lt|gt|nbsp);/gi, (entity, code) => {
-      if (!code.startsWith('#')) return entities[code.toLowerCase()] ?? entity;
-      const hexadecimal = code[1].toLowerCase() === 'x';
-      const point = Number.parseInt(code.slice(hexadecimal ? 2 : 1), hexadecimal ? 16 : 10);
-      return point > 0 && point <= 0x10ffff && !(point >= 0xd800 && point <= 0xdfff)
-        ? String.fromCodePoint(point) : '';
-    })
-    .replace(/\s+/g, ' ')
-    .trim();
-};
 
 const imageSource = (source) => {
   if (typeof source !== 'string') return '';
@@ -35,18 +17,18 @@ const imageSource = (source) => {
 };
 
 const normalizeProduct = (product, slug) => {
-  if (!product || !validIdentifier(product.id) || !plainText(product.name)
+  if (!product || !validIdentifier(product.id) || !plainProductText(product.name)
     || typeof product.price?.raw !== 'number' || !Number.isFinite(product.price.raw)
-    || product.price.raw < 0 || !plainText(product.price.formatted_with_symbol)) return null;
+    || product.price.raw < 0 || !plainProductText(product.price.formatted_with_symbol)) return null;
 
   return {
     id: product.id,
-    name: plainText(product.name),
+    name: plainProductText(product.name),
     permalink: validIdentifier(product.permalink) ? product.permalink : slug,
-    description: plainText(product.description),
+    description: plainProductText(product.description),
     price: {
       raw: product.price.raw,
-      formatted_with_symbol: plainText(product.price.formatted_with_symbol),
+      formatted_with_symbol: plainProductText(product.price.formatted_with_symbol),
     },
     media: { source: imageSource(product.media?.source) },
   };

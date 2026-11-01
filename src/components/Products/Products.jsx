@@ -8,8 +8,8 @@ import CartConfirmation from '../CartFeedback/CartConfirmation';
 import Product from './Product/Product';
 import styles from './styles';
 
-const Products = ({ products, onAddToCart, isUpdating = false }) => {
-  const { addProduct, addingId, added, unexpectedError, dismiss } = useAddToCart(onAddToCart, isUpdating);
+const Products = ({ products, totalProducts = products.length, query = '', controls, onClearSearch, onFocusFallback, onAddToCart, isUpdating = false }) => {
+  const { addProduct, addingId, added, unexpectedError, dismiss } = useAddToCart(onAddToCart, isUpdating, onFocusFallback);
 
   return (
     <Box component="main" sx={styles.content}>
@@ -36,9 +36,19 @@ const Products = ({ products, onAddToCart, isUpdating = false }) => {
             <Typography component="h2" variant="h2" id="collection-title" sx={styles.collectionTitle}>The everyday collection</Typography>
             <Typography color="text.secondary" variant="body2">Useful things. Room to make them yours.</Typography>
           </Box>
-          <Typography sx={styles.productCount}>{products.length} essentials</Typography>
         </Box>
+        {controls}
+        <Typography aria-live="polite" aria-atomic="true" sx={styles.resultsSummary}>
+          {products.length}{query ? ` of ${totalProducts}` : ''} {products.length === 1 && !query ? 'product' : 'products'}{query ? ` for “${query}”` : ''}
+        </Typography>
         {unexpectedError && <Alert severity="error" sx={{ mb: 3 }}>{unexpectedError}</Alert>}
+        {!products.length && (
+          <Box sx={styles.emptyResults}>
+            <Typography component="h3" variant="h2" sx={styles.emptyTitle}>No products found</Typography>
+            <Typography color="text.secondary" sx={styles.emptyCopy}>We couldn&apos;t find a match for “{query}”. Try a broader term, such as desk or notebook, or clear your search to see the collection.</Typography>
+            <Button variant="outlined" onClick={onClearSearch}>Clear search</Button>
+          </Box>
+        )}
         <Grid container spacing={{ xs: 2.5, sm: 3 }}>
           {products.map((product) => (
             <Grid key={product.id} size={{ xs: 12, sm: 6, lg: 4 }}>
