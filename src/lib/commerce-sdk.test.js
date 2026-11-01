@@ -29,6 +29,30 @@ const live = {
   total_with_tax: money(27),
 };
 
+test('product retrieval sends permalink query parameters through the real SDK transport', async () => {
+  const product = { id: 'prod_notebook', permalink: 'notebook', name: 'Notebook' };
+  const { client, adapter } = createClient(() => product);
+
+  expect(await client.products.retrieve('notebook', { type: 'permalink' })).toEqual(product);
+  expect(adapter.mock.calls[0][0]).toEqual(expect.objectContaining({
+    url: 'products/notebook', method: 'get', params: { type: 'permalink' },
+    baseURL: 'https://api.chec.io/v1/',
+  }));
+  expect(adapter.mock.calls[0][0].headers['X-Authorization']).toBe('pk_test_sdk_contract');
+});
+
+test('product id retrieval sends no permalink query and preserves provider 404', async () => {
+  const transportError = Object.assign(new Error('Product not found'), {
+    response: { status: 404, statusText: 'Not Found', data: { error: { message: 'Product not found' } } },
+  });
+  const { client, adapter } = createClient(() => { throw transportError; });
+
+  await expect(client.products.retrieve('prod_missing')).rejects.toMatchObject({ statusCode: 404 });
+  expect(adapter.mock.calls[0][0]).toEqual(expect.objectContaining({
+    url: 'products/prod_missing', method: 'get', params: {},
+  }));
+});
+
 test.each([
   ['add', ['product_1', 3], 'carts/cart_1', 'post', { id: 'product_1', quantity: 3 }],
   ['update', ['item_1', { quantity: 3 }], 'carts/cart_1/items/item_1', 'put', { quantity: 3 }],

@@ -3,6 +3,8 @@
 import { Box, Card, CardMedia, CardContent, CardActions, Typography, Button, CircularProgress } from '@mui/material';
 import { Add } from '@mui/icons-material';
 import { useId } from 'react';
+import Link from 'next/link';
+import { productPath } from '../../../lib/product-path';
 
 import styles from './styles';
 
@@ -13,7 +15,9 @@ const Product = ({ product, onAddToCart, isUpdating = false, isAdding = false })
       <CardMedia component="img" sx={styles.media} image={product.media.source} alt={product.name} />
       <CardContent sx={styles.content}>
         <Box sx={styles.cardContent}>
-          <Typography component="h3" id={titleId} sx={styles.name}>{product.name}</Typography>
+          <Typography component="h3" id={titleId} sx={styles.name}>
+            <Box component={Link} href={productPath(product)} sx={styles.detailLink}>{product.name}</Box>
+          </Typography>
           <Typography sx={styles.price}>{product.price.formatted_with_symbol}</Typography>
         </Box>
         <Typography component="div" sx={styles.description} dangerouslySetInnerHTML={{ __html: product.description }} variant="body2" color="text.secondary" />

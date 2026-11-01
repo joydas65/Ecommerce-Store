@@ -67,7 +67,7 @@ for (const width of [360, 390, 768, 1440]) {
 }
 
 async function tabTo(page, target) {
-  for (let step = 0; step < 16; step += 1) {
+  for (let step = 0; step < 24; step += 1) {
     await page.keyboard.press('Tab');
     if (await target.evaluate((element) => element === document.activeElement)) return;
   }

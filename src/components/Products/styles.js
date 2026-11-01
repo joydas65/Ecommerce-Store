@@ -20,13 +20,7 @@ const styles = {
   productCount: { fontSize: 12, whiteSpace: 'nowrap', color: 'text.secondary', display: { xs: 'none', sm: 'block' } },
   collectionEnd: { textAlign: 'center', borderTop: '1px solid', borderColor: 'divider', mt: 6, pt: 4, color: 'primary.main' },
   endMark: { fontFamily: 'Georgia, serif', fontSize: 32, mb: 0.5 },
-  confirmation: {
-    position: 'fixed', bottom: { xs: 16, sm: 24 }, left: '50%', transform: 'translateX(-50%)',
-    width: 'max-content', maxWidth: 'calc(100% - 32px)', zIndex: 1200,
-    display: 'flex', alignItems: 'center', gap: 1, p: 1.5,
-    border: '1px solid #a6b9a7', boxShadow: '0 6px 28px rgba(25,61,48,0.15)',
-  },
-  confirmationMessage: { display: 'flex', alignItems: 'center', gap: 1, flex: '1 1 220px', minWidth: 0, overflowWrap: 'anywhere' },
+
 };
 
 export default styles;

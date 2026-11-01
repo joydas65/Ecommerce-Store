@@ -1,39 +1,15 @@
 'use client';
 
-import { useRef, useState } from 'react';
-import { Box, Button, Grid, Typography, Paper, IconButton, Alert } from '@mui/material';
-import { ArrowForward, CheckCircleOutlined, Close } from '@mui/icons-material';
-import Link from 'next/link';
+import { Box, Button, Grid, Typography, Alert } from '@mui/material';
+import { ArrowForward } from '@mui/icons-material';
+import useAddToCart from '../../hooks/useAddToCart';
+import CartConfirmation from '../CartFeedback/CartConfirmation';
 
 import Product from './Product/Product';
 import styles from './styles';
 
 const Products = ({ products, onAddToCart, isUpdating = false }) => {
-  const activeAdd = useRef(false);
-  const lastAddButton = useRef(null);
-  const [addingId, setAddingId] = useState(null);
-  const [added, setAdded] = useState(null);
-  const [unexpectedError, setUnexpectedError] = useState('');
-
-  const addProduct = async (product, button) => {
-    if (activeAdd.current || isUpdating) return;
-    activeAdd.current = true;
-    lastAddButton.current = button;
-    setAddingId(product.id);
-    setAdded(null);
-    setUnexpectedError('');
-    try {
-      const result = await onAddToCart(product.id, 1);
-      if (result?.status === 'success') setAdded(product.name);
-    } catch {
-      // The commerce provider normally returns an explicit error outcome. Also
-      // keep unexpected rejections from becoming unhandled or false confirmations.
-      setUnexpectedError('Your cart could not be updated. Please try again.');
-    } finally {
-      activeAdd.current = false;
-      setAddingId(null);
-    }
-  };
+  const { addProduct, addingId, added, unexpectedError, dismiss } = useAddToCart(onAddToCart, isUpdating);
 
   return (
     <Box component="main" sx={styles.content}>
@@ -77,18 +53,7 @@ const Products = ({ products, onAddToCart, isUpdating = false }) => {
         <Typography variant="body2">A few good things for your everyday.</Typography>
         <Typography variant="caption" color="text.secondary">Joy&apos;s Store · Work & everyday</Typography>
       </Box>
-      <Box role="status" aria-live="polite" aria-atomic="true">
-        {added && (
-          <Paper sx={styles.confirmation} elevation={0}>
-            <Box sx={styles.confirmationMessage}>
-              <CheckCircleOutlined color="primary" sx={{ flexShrink: 0, display: { xs: 'none', sm: 'block' } }} />
-              <Typography fontSize={14} fontWeight={600}>{added} added to your cart.</Typography>
-            </Box>
-            <Button component={Link} href="/cart" variant="contained" size="small" sx={{ flexShrink: 0, px: 1.5 }}>View cart</Button>
-            <IconButton aria-label="Dismiss cart confirmation" onClick={() => { setAdded(null); lastAddButton.current?.focus(); }} size="small" sx={{ flexShrink: 0 }}><Close fontSize="small" /></IconButton>
-          </Paper>
-        )}
-      </Box>
+      <CartConfirmation added={added} onDismiss={dismiss} />
     </Box>
   );
 };
