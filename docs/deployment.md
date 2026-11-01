@@ -11,7 +11,18 @@ This repository deploys the **simulated demo**, not the live merchant integratio
 - Runtime: Node.js 24.x on Vercel; the local/CI patch version is pinned in `.nvmrc`.
 - Repository linking metadata lives in ignored `.vercel/project.json`; local environment files are excluded from uploads by `.vercelignore`.
 
-The first public deployment URL and release verification are recorded after deployment succeeds. Creating a project or committing this workflow alone does not prove that remote checks or domain promotion have run.
+Public demo: **[joys-store.vercel.app](https://joys-store.vercel.app)**. Release identity is available at [`/api/health`](https://joys-store.vercel.app/api/health).
+
+### First verified automatic release — 1 November 2026
+
+Commit `e49c46d8675479ad1fba848cc1515f2e3c8a5f8b` was built from Git and automatically promoted after both native gates succeeded:
+
+- [Local verification](https://github.com/joydas65/Ecommerce-Store/actions/runs/41282129962): lint, 92 Jest tests, 13 release-event tests, and 10 production-browser tests across demo and live-mode unavailable states.
+- [Deployed verification](https://github.com/joydas65/Ecommerce-Store/actions/runs/41282241521): five browser tests against the immutable deployment, including exact commit identity, purchase success, controlled failure recovery, and cart synchronization.
+- Vercel was observed in `READY / STAGED` with no production alias while the browser gate ran, then `READY / PROMOTED` with `joys-store.vercel.app` assigned. The public health endpoint returned the same commit and `mode: demo`.
+- A superseded staged release passed its purchase tests but was rejected by the final branch-head check, confirming that an older commit cannot be approved by this workflow after `main` advances.
+
+The release's runtime error query returned no records during verification. This is a point-in-time check; alerting, log drains, and service-level objectives are not configured. The rollback procedure below is documented; a rollback drill has not yet been performed.
 
 These GitHub repository **variables** are configured. They are identifiers rather than credentials:
 
@@ -47,7 +58,7 @@ Use an authenticated Vercel CLI linked to the intended project:
 
 ```sh
 vercel inspect <deployment-url>
-vercel logs <deployment-url> --level error
+vercel logs --deployment <deployment-url> --query 'level:error' --since 30m
 ```
 
 To run the deployed suite locally, use the immutable URL and full commit shown by the authenticated deployment inspection:

@@ -2,9 +2,11 @@
 
 A Next.js storefront with a seeded demo you can purchase from without merchant credentials. The same catalog, cart, and shipping flow also supports the live Commerce.js and Stripe integration.
 
+**[Open the live demo](https://joys-store.vercel.app)** — browse products, use the sample address, and complete a simulated purchase. No login or payment details are needed.
+
 The portfolio direction is a polished, single-store commerce demo that shows the complete journey from a shopper placing an order to a merchant managing it. The goal is to demonstrate senior full-stack engineering through clear product decisions, reliable transactions, maintainable boundaries, and evidence from tests.
 
-**Current status:** the Next.js foundation and credential-free purchasing demo are implemented. Demo orders are explicitly simulated. Application APIs, a database, and merchant tools remain planned.
+**Current status:** the Next.js foundation and credential-free purchasing demo are deployed on Vercel. GitHub CI and deployed purchase checks gate production releases. Demo orders are explicitly simulated. Commerce APIs, a database, and merchant tools remain planned.
 
 The [Vercel release guide](docs/deployment.md) documents deployment checks, project configuration, release verification, and rollback recovery.
 
@@ -136,10 +138,11 @@ Each milestone should leave a working, demonstrable application. Scope is one st
 | --- | --- | --- |
 | 1a. Project foundation | Implemented: maintained runtime, Next.js routes, npm lockfile, modern UI dependencies, and automated checks | Reproducibility, framework boundaries, migration safety |
 | 1b. Reproducible purchasing demo | Implemented: seeded products, explicit simulation mode, simulated purchases, and controlled failure recovery | Provider interfaces, deterministic testing, integration design |
+| 1c. Vercel release foundation | Deployed: Git integration, previews, CI and deployed purchase gates, release identity, and recovery instructions | Deployment safety, least-privilege automation, verifiable releases |
 | 2. Complete shopper experience | Planned: branding, product details, discovery, mobile polish, keyboard access, and measured performance | Product judgment, accessibility, frontend architecture |
 | 3. Full-stack order workflow | Planned: application API and database, authoritative price/availability checks, persisted orders, and authenticated merchant order management | Data modeling, authorization, concurrency, transaction boundaries |
 | 4. Reliable operation | Planned: duplicate-safe processing, provider reconciliation, deeper browser/API tests, structured diagnostics, and recovery instructions | Failure handling, observability, security, operating a service |
-| 5. Interview presentation | Planned: hosted demo, screenshots, decision records, measured results, and a walkthrough of success and failure paths | Explaining tradeoffs and supporting claims with evidence |
+| 5. Interview presentation | Hosted demo and decision records available; a polished walkthrough, screenshots, and broader measured results remain planned | Explaining tradeoffs and supporting claims with evidence |
 
 ### Next milestone: polish the shopper experience
 
