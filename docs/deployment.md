@@ -1,6 +1,6 @@
 # Vercel release and recovery
 
-This repository deploys the **simulated demo**, not the live merchant integration. `vercel.json` runs lint and Jest before a Next.js build. Catalog, payment, and storage are selected through validated public settings, rather than a build command that forces demo mode. With no explicit provider settings, the safe seeded/simulated defaults and existing legacy environment settings remain effective. The release browser gate still requires simulated checkout; enabling direct Stripe requires its own verified rollout. Preview and production deployments of this public portfolio project are intended to be publicly accessible. No merchant credentials, Vercel deployment token, or protection-bypass secret are supplied to the browser workflow.
+Production is configured for a **seeded catalog, Stripe test checkout, and remote orders**. Local defaults and previews retain simulated checkout. `vercel.json` runs lint and Jest before a Next.js build, and validated public settings select catalog, payment, and storage independently. The release browser gate selects the configured provider and verifies the exact deployment before promotion. No real charges or shipments are supported. Storefront deployments are publicly accessible; no merchant credentials, Vercel deployment token, or protection-bypass secret are supplied to the browser workflow.
 
 ## Project and configuration
 
@@ -30,7 +30,8 @@ These GitHub repository **variables** are configured. They are identifiers rathe
 | --- | --- |
 | `VERCEL_PROJECT_ID` | `prj_lZSwq0GJzgZ89G01fTPPlYMCjdz2` |
 | `VERCEL_PROJECT_NAME` | `joys-store` |
-| `DEMO_ORDER_STORAGE` | `remote` after the order service is provisioned; otherwise `local` |
+| `DEMO_ORDER_STORAGE` | `remote` for production; previews use `local` |
+| `PAYMENT_PROVIDER` | `stripe` for production; previews use simulation |
 
 The Vercel project is connected to this GitHub repository with repository dispatch events enabled and production domain auto-assignment on. Native Deployment Checks require both of these GitHub checks for **production**:
 
@@ -47,11 +48,11 @@ Vercel supplies `NODE_ENV=production` during builds. The build command sets `NOD
 
 1. Push a feature branch and open a pull request. GitHub runs local verification and Vercel creates a preview.
 2. Vercel emits `vercel.deployment.ready` after building. The deployment workflow validates the Vercel app sender, configured project, HTTPS deployment origin, and a current branch commit in this repository. Fork references and stale deployments are rejected before tests run.
-3. A read-only job runs the trusted default-branch browser harness against that deployment. `/api/health` must report `{ status: "ok", mode: "demo", commit: <the deployed SHA> }` with `Cache-Control: no-store`. The health endpoint reports public release identity, not dependency/database readiness.
+3. A job with read-only repository permissions runs the trusted default-branch browser harness against that deployment. `/api/health` must report the exact deployed SHA and `Cache-Control: no-store`. The Stripe gate additionally requires `providers: { catalog: "seeded", payment: "stripe", orders: "remote" }`. The legacy `mode` field is `live` for Stripe, including sandbox payments; provider configuration and receipt `paymentMode: test` identify the test flow. Health reports release identity, not dependency/database readiness.
 4. A separate job reports the browser result to the **deployed commit**, not the dispatch workflow's default-branch SHA. Preview and production use different status names.
 5. After a change reaches `main`, Vercel assigns production domains only when the required local and deployed checks pass. A failed check leaves the previous release serving traffic.
 
-The GitHub workflow uses `repository_dispatch` rather than `deployment_status: success`, since a success notification may arrive only after promotion. It must exist on `main` before Vercel can trigger it. Browser reports and failure artifacts are retained for seven days in the workflow run. Production remote-mode checks persist synthetic orders and test receipt reload, guest isolation and recovery after a lost response. They cannot create real charges or merchant orders. Preview checks use local simulation.
+The GitHub workflow uses `repository_dispatch` rather than `deployment_status: success`, since a success notification may arrive only after promotion. It must exist on `main` before Vercel can trigger it. Browser reports and failure artifacts are retained for seven days. Production Stripe checks create an unpaid sandbox session, test receipt reload and guest isolation, then verify cancellation with the cart preserved. They never enter card details. Local persistent-order tests cover response-loss recovery with real PostgreSQL; previews use local simulation.
 
 ## Persistent order service
 
@@ -62,12 +63,12 @@ Set these **production-only** storefront variables once the backend's migrations
 | Variable | Purpose |
 | --- | --- |
 | `NEXT_PUBLIC_CATALOG_PROVIDER=seeded` | Select the sample catalog independently of payment |
-| `NEXT_PUBLIC_PAYMENT_PROVIDER=simulated` | Select simulated checkout explicitly |
+| `NEXT_PUBLIC_PAYMENT_PROVIDER=stripe` | Select hosted Stripe test checkout; use `simulated` to retain simulation |
 | `NEXT_PUBLIC_ORDER_STORAGE=remote` | Use the remote order service |
 | `ORDERS_API_URL` | The backend's HTTPS `.vercel.app` production origin |
 | `ORDERS_API_SECRET` | Random server-only credential shared with the backend; never expose it to the browser |
 
-The previous `NEXT_PUBLIC_DEMO_ORDER_STORAGE=remote` remains a compatibility default until explicit provider settings are configured. Set GitHub repository variable `DEMO_ORDER_STORAGE=remote` at the same time. This makes the deployed browser gate require remote storage and exercise real persistence. Preview environments omit the API credential and use local mode. Neither production database credentials nor the service credential belong in storefront GitHub browser checks.
+The previous `NEXT_PUBLIC_DEMO_ORDER_STORAGE=remote` remains a compatibility default. Keep GitHub variables `DEMO_ORDER_STORAGE=remote` and `PAYMENT_PROVIDER=stripe` aligned with the production build so its gate selects the correct suite. Preview environments omit the API credential and use local simulation. Neither production database credentials nor the service credential belong in storefront GitHub browser checks.
 
 Activate persistent checkout with a new commit after saving these production settings. Wait for that commit's `verify` and `Vercel - Ecommerce-Store: production browser checks` results, then confirm the public `/api/health` reports the new commit and `orderStorage: remote`. Keep preview storage explicitly `local`. Rebuilding an already-approved commit can reuse earlier GitHub statuses, so a fresh commit is the activation path.
 
@@ -80,6 +81,12 @@ To rotate the service credential, coordinate the backend and storefront server-o
 ## Activate direct Stripe test checkout
 
 Keep this separate from enabling real payments. The backend rejects live secret keys, and the storefront labels the hosted flow as test-only. Simulation remains available by selecting `simulated` instead of `stripe`.
+
+On November 1, 2026, backend commit `20561b58cc07ab55e0fe153759fd0c2a8d418127` passed [verification and the additive migration gate](https://github.com/joydas65/Ecommerce-Orders/actions/runs/41326193927) before deployment. Storefront commit `2f0858d88f112eddd3a06a90ed70c3f016e90577` then passed [CI](https://github.com/joydas65/Ecommerce-Store/actions/runs/41326310303) and [deployed browser checks](https://github.com/joydas65/Ecommerce-Store/actions/runs/41326465401) before reaching the public alias. Health reported the exact revision and `seeded/stripe/remote` providers.
+
+A public sandbox-card purchase independently verified the complete flow: Notebook $12.00, shipping $5.00, sample tax $1.36, total $18.36. Stripe reported `complete`, `paid`, and `livemode: false`; its signed webhook returned HTTP 200. The private receipt showed confirmation, cleared the matching cart, and remained confirmed after a full reload. An unsigned webhook returned HTTP 400. Runtime error scans for both released deployments were clean. These checks verify test payments only.
+
+![Public Stripe test receipt after reload](images/stripe-production-receipt.png)
 
 1. Release the reviewed backend revision and its additive `002_stripe_payments.sql` migration first. Existing simulated orders and legacy recovery keys remain compatible. Update the storefront CI backend pin to that revision.
 2. In the backend production environment, set `STRIPE_PAYMENTS_ENABLED=true`, a sandbox `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, and `STOREFRONT_ORIGIN=https://joys-store.vercel.app`. Keep secrets server-only. Register the sandbox webhook at `https://joys-orders.vercel.app/v1/webhooks/stripe` for Checkout completion, async success/failure, and expiration. Keep `NODEJS_HELPERS=0` so signature validation receives unmodified bytes.
@@ -103,11 +110,12 @@ To run the deployed suite locally, use the immutable URL and full commit shown b
 ```sh
 E2E_BASE_URL=https://<deployment-host>.vercel.app \
 E2E_EXPECTED_COMMIT_SHA=<full-commit-sha> \
+E2E_MODE=stripe \
 E2E_ORDER_STORAGE=remote \
 npm run test:e2e:deployed
 ```
 
-The suite starts no local server. It checks the health revision, routes, product assets, keyboard access, checkout success, payment-failure recovery, and cross-tab cart synchronization. Its navigation-timing attachment is a diagnostic baseline, not a performance score or service-level guarantee. Reports are written to `playwright-report/deployed` and `test-results/deployed`.
+The suite starts no local server. Stripe mode checks the health revision and capabilities, product routes and assets, a real unpaid sandbox session, private receipt reload, and cancellation without clearing the cart. Use `E2E_MODE=demo` for a simulated deployment; that suite also covers completed purchases, controlled failures, keyboard access, and cross-tab cart synchronization. Reports are written to `playwright-report/deployed` and `test-results/deployed`. A paid sandbox checkout must be verified separately with test card `4242 4242 4242 4242`, a future expiry, and a three-digit CVC.
 
 ## Roll back and resume
 
@@ -126,7 +134,7 @@ Do not use Force Promote to turn a failed check into a successful release. Promo
 - **401/403 from a preview:** this project's workflow expects a public demo URL. Do not add a secret to arbitrary dispatch URLs. A future protected deployment requires authenticated Vercel metadata validation and a reviewed, protected test harness before introducing any authentication credential.
 - **Checks pass but the domain remains on an older release:** inspect native Deployment Checks, exact check names, and whether a previous rollback disabled auto-assignment.
 - **Repeated deployment of the same SHA:** GitHub statuses are commit-scoped and may reuse an earlier success. Use a new commit for normal releases. For an intentional same-SHA configuration rebuild, stage production without assigning domains, test that exact deployment URL, and promote that tested production build explicitly.
-- **Simulated orders only:** public previews contain seeded fixtures. Do not place real customer data or merchant secrets in these environments. A future live commerce release needs a separate environment and protection policy.
+- **Test purchases only:** production uses Stripe sandbox payments and previews use simulation, both with seeded fixtures. Use sample customer details. A real commerce release needs its own operational readiness and environment review.
 - **Recovery scope:** rolling back either application does not revert database writes. Keep migrations backward-compatible, preserve idempotency records through their retention period, and inspect the backend recovery guide before a schema change.
 
 References: [Vercel Git integration](https://vercel.com/docs/git/vercel-for-github), [Deployment Checks](https://vercel.com/docs/deployment-checks), [rollback](https://vercel.com/docs/cli/rollback), [promotion](https://vercel.com/docs/cli/promote).

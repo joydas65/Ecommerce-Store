@@ -1,12 +1,12 @@
 # Joy's Store
 
-A Next.js storefront with a seeded demo you can purchase from without merchant credentials. The same catalog, cart, and shipping flow also supports the live Commerce.js and Stripe integration.
+A Next.js storefront with a sample catalog, persistent orders, and Stripe sandbox checkout. Catalog, payment, and order storage are independent capabilities; a credential-free simulated provider remains available for local development and previews.
 
-**[Open the live demo](https://joys-store.vercel.app)** — browse products, use the sample address, and complete a simulated purchase. No login or payment details are needed.
+**[Open the live demo](https://joys-store.vercel.app)** — browse products, use the sample address, and try Stripe checkout with test card **4242 4242 4242 4242**, any future expiry, and any three-digit CVC. No shopper login is required. No real money is charged and nothing is shipped.
 
 The portfolio direction is a polished, single-store commerce demo that shows the complete journey from a shopper placing an order to a merchant managing it. The goal is to demonstrate senior full-stack engineering through clear product decisions, reliable transactions, maintainable boundaries, and evidence from tests.
 
-**Current status:** the Next.js storefront is deployed on Vercel. Remote demo mode supports persistent orders through a separate Node.js service and PostgreSQL, with reloadable private receipts and recovery after a lost response. GitHub CI and deployed purchase checks gate releases. Payments remain explicitly simulated; merchant tools remain planned.
+**Current status:** the Next.js storefront and separate Node.js order service run on Vercel, with PostgreSQL persistence, private reloadable receipts, and recovery after a lost response. The Stripe test release adds hosted checkout, signed webhooks, and server-side payment reconciliation. GitHub CI, database migration checks, and deployed browser checks gate releases. Real payments and merchant tools remain outside this release.
 
 The [Vercel release guide](docs/deployment.md) documents deployment checks, project configuration, release verification, and rollback recovery.
 
@@ -18,12 +18,12 @@ The [Vercel release guide](docs/deployment.md) documents deployment checks, proj
 - A workspace-inspired storefront, shared visual theme, visible add actions, and confirmed cart feedback with a direct View cart action.
 - Search names, descriptions, and sample specifications; sort by featured order, price, or name. Share `q`/`sort` URLs, restore results with browser history, and recover from empty results.
 - Keyboard navigation, a skip link, and verified catalog layouts at phone, tablet, and desktop widths.
-- Six seeded products with local illustrations, a cart that survives reloads, sample address entry, and simulated order confirmations.
-- A controlled payment failure that preserves the cart and lets the shopper retry.
+- Six seeded products with local illustrations, a cart that survives reloads, and sample address entry.
+- Hosted Stripe test checkout with pending, paid, canceled, and review-required receipts; simulation remains configurable and includes a controlled payment failure.
 - When remote order storage is enabled: server-calculated quotes, durable orders, private `/orders/[id]` receipts, and duplicate-safe recovery after a timeout or reload.
 - Shipping country, region, and delivery-method selection, including countries without regions.
 - Order review based on the selected provider's shipping and tax calculations.
-- Confirmation only after a successful capture returns an order; references come from the provider.
+- Stripe confirmation only after the backend verifies payment, totals, currency, and test mode; returning from checkout alone never confirms an order.
 - Visible service errors and retries, address restoration when going back, and protection against repeated in-flight payment submissions.
 - Checkout regression tests and production-browser smoke tests, with automated lint, test, and build checks.
 
@@ -35,7 +35,7 @@ The [Vercel release guide](docs/deployment.md) documents deployment checks, proj
 | Runtime | Node.js 24.22.2, pinned in `.nvmrc` |
 | Package manager | npm 11.19.1, one committed `package-lock.json`, exact dependency versions |
 | UI | Material UI 9.5.0 with Emotion and the Next.js App Router cache provider |
-| Forms and payments | React Hook Form 7 and Stripe Elements |
+| Forms and payments | React Hook Form 7 and hosted Stripe Checkout; Stripe Elements retained for the legacy Commerce.js adapter |
 | Verification | ESLint, Jest/React Testing Library, and Playwright |
 
 ```mermaid
@@ -44,20 +44,22 @@ flowchart LR
     Next --> Detail[Server-rendered product pages]
     Detail --> Reader[Server-only product reader]
     Reader --> Fixtures[Local sample product fixtures]
-    Reader -->|Explicit live mode| Commerce[Commerce.js API]
+    Reader -->|Legacy catalog provider| Commerce[Commerce.js API]
     Next --> UI[Client storefront and checkout]
     UI --> State[Shared commerce state]
     State --> Adapter[Shared browser commerce interface]
     UI -->|Shipping and checkout operations| Adapter
-    Adapter -->|Default demo| Demo[Seeded local provider]
+    Adapter -->|Seeded catalog and cart| Demo[Seeded local provider]
     Demo --> Cart[Browser cart storage]
-    Adapter -->|Remote demo orders| BFF[Same-origin Next.js order routes]
+    Adapter -->|Simulated or Stripe test orders| BFF[Same-origin Next.js order routes]
     BFF -->|Server-only credential| Orders[Node.js order service]
     Orders --> DB[(PostgreSQL)]
     Orders -->|Test payment sessions / reconciliation| StripeAPI[Stripe Checkout API]
     StripeAPI -->|Signed payment events| Orders
-    Adapter -->|Explicit live mode| Commerce[Commerce.js API]
-    UI -->|Live payment method creation| Stripe[Stripe.js / Elements]
+    UI -->|Hosted test checkout| Hosted[Stripe Checkout page]
+    Hosted -->|Return to private receipt| Next
+    Adapter -->|Legacy provider| Commerce[Commerce.js API]
+    UI -->|Legacy payment method creation| Stripe[Stripe.js / Elements]
     Stripe -->|Payment method identifier| UI
 ```
 
@@ -84,13 +86,15 @@ npm run dev
 
 Open [localhost:3000](http://localhost:3000). **No environment file, merchant account, or payment details are needed for the demo.**
 
-### Try the demo
+### Try the hosted Stripe demo
 
 1. Open the [Desk Mat product page](https://joys-store.vercel.app/products/desk-mat), review the sample details, add it, and open the cart. Adjust quantities or reload to see the cart persist.
 2. Choose **Checkout**, then **Use sample address**. Select a shipping option and continue.
-3. Review the shipping and sample tax, then choose **Place demo order**. One Desk Mat with standard shipping totals **$42.12**.
-4. Optionally select **Simulate a payment failure** before submitting. The first attempt shows an error and preserves the cart; the next attempt completes normally.
-5. The confirmation has a `DEMO-` reference. No payment is collected and nothing is shipped. Return to the catalog to repeat; **Empty Cart** clears a saved cart.
+3. Review the shipping and sample tax, then choose **Continue to Stripe test checkout**. One Desk Mat with standard shipping totals **$42.12**.
+4. On Stripe's sandbox page, use **4242 4242 4242 4242**, any future expiry, and any three-digit CVC. Use sample contact details rather than personal information.
+5. Return to the private receipt. Only a server-verified test payment shows **Stripe test order complete** and clears the matching cart. Reload the receipt to see the saved result.
+
+If you return without paying, the order stays pending and the cart remains intact. **Resume Stripe checkout** reopens the same session; **Cancel checkout** verifies cancellation on the server. In the default local demo or a simulated preview, choose **Place demo order** instead. Its optional **Simulate a payment failure** control demonstrates retry behavior without a payment provider.
 
 ### Share a collection view
 
@@ -131,7 +135,7 @@ Checkout redirects to Stripe's hosted test page. Use only [Stripe test payment d
 
 A lost response or reload reuses the saved quote and submission key. **Cancel checkout** expires the Stripe Session and checks its actual state; the browser Back button alone does not cancel a payment. Only a verified paid receipt clears the matching cart snapshot, preserving products added in another tab. Switching the payment setting back to `simulated` keeps the demo provider available without Stripe.
 
-The public portfolio remains on its configured provider until a verified release activates a different one. No Stripe secret or webhook signing key belongs in this storefront or in its browser checks.
+The production configuration selects `seeded/stripe/remote`; local defaults and previews use simulation. A provider change takes effect through a verified release. No Stripe secret or webhook signing key belongs in this storefront or in its browser checks.
 
 ### Optional legacy Commerce.js / Stripe integration
 
@@ -169,7 +173,8 @@ npm start
 | `npm run test:e2e:demo` | Run only the seeded purchase and recovery browser tests |
 | `npm run test:e2e:live` | Run only the live-mode checks with merchant keys deliberately absent |
 | `npm run test:e2e:persistent` | Run the demo suite plus real persistent purchase, receipt and recovery checks; requires the local Node service and PostgreSQL |
-| `npm run test:e2e:deployed` | Verify a public demo deployment using `E2E_BASE_URL` and optional `E2E_EXPECTED_COMMIT_SHA` |
+| `npm run test:e2e:stripe-contract` | Verify Stripe checkout and receipt UI using browser contract fixtures, without payment credentials |
+| `npm run test:e2e:deployed` | Verify a public deployment using `E2E_BASE_URL`, `E2E_EXPECTED_COMMIT_SHA`, and `E2E_MODE=stripe` for the hosted test provider |
 
 Install Playwright's browser before the first browser-test run:
 
@@ -188,7 +193,7 @@ The Jest suite covers confirmed and failed captures, slow responses, duplicate s
 
 Playwright uses the real demo implementation to exercise shared searches, sorting, browser history, empty-state recovery, catalog-to-detail navigation, all six product deep links and reloads, server content with JavaScript disabled, product HTTP 404 recovery, mobile keyboard use, cart mutations and reloads, shipping totals, completed purchases, and controlled failure recovery. It rejects off-origin HTTP requests, uncaught errors, and hydration errors in demo mode. A separate production build verifies live-mode unavailable states, direct navigation/reloads, and the not-found page without merchant keys. Reports for each mode are kept separately.
 
-[GitHub Actions](.github/workflows/ci.yml) runs lint, Jest, release-event validation, and production Playwright checks on pushes and pull requests. The [deployment workflow](.github/workflows/deployment-checks.yml) verifies Vercel's built demo before native Deployment Checks permit production promotion. Browser reports are retained as seven-day workflow artifacts. No merchant credentials are required by CI; see the [release guide](docs/deployment.md) for the external Vercel settings needed to enable the gate.
+[GitHub Actions](.github/workflows/ci.yml) runs lint, Jest, release-event validation, and production Playwright checks on pushes and pull requests. The [deployment workflow](.github/workflows/deployment-checks.yml) verifies the configured provider before native Deployment Checks permit production promotion. Its Stripe gate creates an unpaid sandbox session, checks receipt ownership and reloads, then cancels it without entering card details. Paid sandbox flows are verified separately; CI fixtures alone do not prove provider integration. Browser reports are retained as seven-day workflow artifacts. No merchant credentials are supplied to browser CI; see the [release guide](docs/deployment.md) for the external Vercel settings needed to enable the gate.
 
 ## Portfolio roadmap
 
@@ -200,21 +205,21 @@ Each milestone should leave a working, demonstrable application. Scope is one st
 | 1b. Reproducible purchasing demo | Implemented: seeded products, explicit simulation mode, simulated purchases, and controlled failure recovery | Provider interfaces, deterministic testing, integration design |
 | 1c. Vercel release foundation | Deployed: Git integration, previews, CI and deployed purchase gates, release identity, and recovery instructions | Deployment safety, least-privilege automation, verifiable releases |
 | 2. Complete shopper experience | Catalog branding, responsive cards, keyboard access, confirmed add feedback, directly linked product detail pages, and search/sorting with shareable URLs implemented | Product judgment, accessibility, frontend architecture |
-| 3. Full-stack order workflow | Persistent demo orders, authoritative price quotes, private receipts and guest authorization implemented; stock reservations and merchant administration remain planned | Data modeling, authorization, concurrency, transaction boundaries |
-| 4. Reliable operation | Duplicate-safe demo submissions, response-loss recovery and real database/browser tests implemented; live provider reconciliation and broader monitoring remain planned | Failure handling, observability, security, operating a service |
+| 3. Full-stack order workflow | Persistent orders, authoritative price quotes, private receipts, guest authorization, and Stripe test checkout implemented; stock reservations and merchant administration remain planned | Data modeling, authorization, concurrency, transaction boundaries |
+| 4. Reliable operation | Duplicate-safe submissions, response-loss recovery, signed Stripe webhooks, payment reconciliation, and real database/browser tests implemented; broader monitoring remains planned | Failure handling, observability, security, operating a service |
 | 5. Interview presentation | Hosted demo and decision records available; a polished walkthrough, screenshots, and broader measured results remain planned | Explaining tradeoffs and supporting claims with evidence |
 
 ### Next milestone: merchant order workflow
 
-Build a bounded, authenticated merchant view on the persistent order model, with explicit permissions and an audit trail. Keep simulated purchases clear and avoid adding real payment handling before reconciliation and operational controls are designed.
+Build a bounded, authenticated merchant view on the persistent order model, with explicit permissions and an audit trail. Keep test purchases clearly labeled. Real payments require a separate readiness review covering fulfillment, tax, refunds, disputes, and operational controls.
 
 ## Current limits
 
 - Search and sorting operate on the loaded collection. All six demo products are included; live merchant pagination and server-side full-catalog search remain future work.
-- The default local demo stores only the cart in the browser. Remote mode persists synthetic orders; neither mode reserves stock, processes money, or synchronizes customer accounts across devices.
-- Remote receipts are private to the guest cookie and expire after 30 days. They are not a substitute for authenticated customer order history.
+- The default local demo stores only the cart in the browser. Remote mode persists synthetic orders and Stripe test payments; it does not reserve stock, move real money, or synchronize customer accounts across devices.
+- Remote receipts are private to the guest cookie. Completed orders have a 30-day retention period; unresolved Stripe payments are retained for reconciliation. Clearing cookies removes guest access. This is not authenticated customer order history.
 - Live shipping and tax amounts come from Commerce.js; demo totals use the documented sample rules.
-- Remote submissions are idempotent per guest and request key, and one quote can create only one order. Independent new quotes are independent purchases; this does not implement payment-provider reconciliation.
-- A functioning merchant account is still needed for real catalog and checkout behavior. Provider sandbox checks and broader operational monitoring remain future work.
+- Remote submissions are idempotent per guest and request key, and one quote can create only one order. Stripe reconciliation verifies the stored session; independent new quotes are independent purchases.
+- The direct Stripe adapter accepts test secret keys only. A functioning merchant account and additional operational work are needed for real catalog, payment, and fulfillment behavior. Broader monitoring remains future work.
 - Free-plan quotas can pause the hosted order service. Production commercial use requires a plan review; the demo does not claim an availability SLA.
 - Planned features and metrics should be presented as completed only after implementation and verification.
