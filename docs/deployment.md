@@ -13,21 +13,23 @@ This repository deploys the **simulated demo**, not the live merchant integratio
 
 The first public deployment URL and release verification are recorded after deployment succeeds. Creating a project or committing this workflow alone does not prove that remote checks or domain promotion have run.
 
-Set these GitHub repository **variables**, which are identifiers rather than credentials:
+These GitHub repository **variables** are configured. They are identifiers rather than credentials:
 
 | Variable | Value |
 | --- | --- |
 | `VERCEL_PROJECT_ID` | `prj_lZSwq0GJzgZ89G01fTPPlYMCjdz2` |
 | `VERCEL_PROJECT_NAME` | `joys-store` |
 
-In Vercel, connect this GitHub repository, enable repository dispatch events, and keep production domain auto-assignment on. Under Deployment Checks, require both of these GitHub checks for **production**:
+The Vercel project is connected to this GitHub repository with repository dispatch events enabled and production domain auto-assignment on. Native Deployment Checks require both of these GitHub checks for **production**:
 
 | External check name | Purpose |
 | --- | --- |
 | `verify` | Lint, Jest, release-event validation, and local production-browser tests |
 | `Vercel - Ecommerce-Store: production browser checks` | Purchase/recovery tests and revision identity on the deployed build |
 
-Use `deployment-alias` as the blocking stage. The deployed-browser check requires `deployment-url`; the local CI check can require `build-ready`. These external settings are required: a workflow file alone does not enable release gating. Keep their names synchronized with the workflows when renaming jobs.
+Both checks block `deployment-alias`. The deployed-browser check requires `deployment-url`; the local CI check requires `build-ready`. Each times out after 25 minutes. These external settings are required: a workflow file alone does not enable release gating. Keep their names synchronized with the workflows when renaming jobs.
+
+Vercel supplies `NODE_ENV=production` during builds. The build command sets `NODE_ENV=test` only for Jest so React's test helpers remain available, then builds Next.js in production mode. Local environment files are never uploaded.
 
 ## Normal release
 
