@@ -1,4 +1,4 @@
-import { isDemoMode } from '../../../lib/commerce-mode';
+import { isDemoMode, isPersistentDemo } from '../../../lib/commerce-mode';
 
 export const dynamic = 'force-dynamic';
 
@@ -7,6 +7,7 @@ export function GET() {
   return Response.json({
     status: 'ok',
     mode: isDemoMode ? 'demo' : 'live',
+    orderStorage: isPersistentDemo ? 'remote' : 'local',
     commit: process.env.VERCEL_GIT_COMMIT_SHA || null,
   }, { headers: { 'Cache-Control': 'no-store' } });
 }

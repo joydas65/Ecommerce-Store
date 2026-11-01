@@ -30,6 +30,7 @@ These GitHub repository **variables** are configured. They are identifiers rathe
 | --- | --- |
 | `VERCEL_PROJECT_ID` | `prj_lZSwq0GJzgZ89G01fTPPlYMCjdz2` |
 | `VERCEL_PROJECT_NAME` | `joys-store` |
+| `DEMO_ORDER_STORAGE` | `remote` after the order service is provisioned; otherwise `local` |
 
 The Vercel project is connected to this GitHub repository with repository dispatch events enabled and production domain auto-assignment on. Native Deployment Checks require both of these GitHub checks for **production**:
 
@@ -50,7 +51,25 @@ Vercel supplies `NODE_ENV=production` during builds. The build command sets `NOD
 4. A separate job reports the browser result to the **deployed commit**, not the dispatch workflow's default-branch SHA. Preview and production use different status names.
 5. After a change reaches `main`, Vercel assigns production domains only when the required local and deployed checks pass. A failed check leaves the previous release serving traffic.
 
-The GitHub workflow uses `repository_dispatch` rather than `deployment_status: success`, since a success notification may arrive only after promotion. It must exist on `main` before Vercel can trigger it. Browser reports and failure artifacts are retained for seven days in the workflow run. Deployment checks test purchases with browser-local cart state; they cannot create real charges or merchant orders.
+The GitHub workflow uses `repository_dispatch` rather than `deployment_status: success`, since a success notification may arrive only after promotion. It must exist on `main` before Vercel can trigger it. Browser reports and failure artifacts are retained for seven days in the workflow run. Production remote-mode checks persist synthetic orders and test receipt reload, guest isolation and recovery after a lost response. They cannot create real charges or merchant orders. Preview checks use local simulation.
+
+## Persistent order service
+
+The backend lives in [Ecommerce-Orders](https://github.com/joydas65/Ecommerce-Orders), deployed separately as `joys-orders`. Its runtime and Neon Free database use US East, near the storefront runtime. Keep the Vercel account on Hobby and the database on Free; quotas can restrict service without upgrading the plan.
+
+Set these **production-only** storefront variables once the backend's migrations and smoke checks pass:
+
+| Variable | Purpose |
+| --- | --- |
+| `NEXT_PUBLIC_DEMO_ORDER_STORAGE=remote` | Build the remote demo adapter into the storefront |
+| `ORDERS_API_URL` | The backend's HTTPS `.vercel.app` production origin |
+| `ORDERS_API_SECRET` | Random server-only credential shared with the backend; never expose it to the browser |
+
+Set GitHub repository variable `DEMO_ORDER_STORAGE=remote` at the same time. This makes the deployed browser gate require remote storage and exercise real persistence. Preview environments omit the API credential and use local mode. Neither production database credentials nor the service credential belong in storefront GitHub browser checks.
+
+Local CI checks out an immutable backend revision and uses a disposable PostgreSQL service. The backend owns versioned migrations, production migration automation, expired-record cleanup and its own release gate. Deploy a backward-compatible backend first, then the storefront. Changing its API contract requires updating the pinned integration revision and both test suites.
+
+To rotate the service credential, coordinate the backend and storefront server-only values and redeploy both. A mismatched secret fails closed with a recoverable unavailable response; it cannot produce a false order confirmation. Do not reuse the documented local test fixture in cloud environments.
 
 ## Inspect a release
 
@@ -66,6 +85,7 @@ To run the deployed suite locally, use the immutable URL and full commit shown b
 ```sh
 E2E_BASE_URL=https://<deployment-host>.vercel.app \
 E2E_EXPECTED_COMMIT_SHA=<full-commit-sha> \
+E2E_ORDER_STORAGE=remote \
 npm run test:e2e:deployed
 ```
 
@@ -89,6 +109,6 @@ Do not use Force Promote to turn a failed check into a successful release. Promo
 - **Checks pass but the domain remains on an older release:** inspect native Deployment Checks, exact check names, and whether a previous rollback disabled auto-assignment.
 - **Repeated deployment of the same SHA:** GitHub statuses are commit-scoped and may reuse an earlier success. Use a new commit for normal releases. For an intentional same-SHA configuration rebuild, stage production without assigning domains, test that exact deployment URL, and promote that tested production build explicitly.
 - **Simulated orders only:** public previews contain seeded fixtures. Do not place real customer data or merchant secrets in these environments. A future live commerce release needs a separate environment and protection policy.
-- **Recovery scope:** this application currently has no application database. A rollback changes the served application; future database migrations will need their own backward-compatibility and recovery plan.
+- **Recovery scope:** rolling back either application does not revert database writes. Keep migrations backward-compatible, preserve idempotency records through their retention period, and inspect the backend recovery guide before a schema change.
 
 References: [Vercel Git integration](https://vercel.com/docs/git/vercel-for-github), [Deployment Checks](https://vercel.com/docs/deployment-checks), [rollback](https://vercel.com/docs/cli/rollback), [promotion](https://vercel.com/docs/cli/promote).

@@ -5,7 +5,7 @@ test('serves the demo with release identity, metadata, keyboard navigation, and 
   expect(health.status()).toBe(200);
   expect(health.headers()['cache-control']).toContain('no-store');
   const release = await health.json();
-  expect(release).toMatchObject({ status: 'ok', mode: 'demo' });
+  expect(release).toMatchObject({ status: 'ok', mode: 'demo', orderStorage: process.env.E2E_ORDER_STORAGE === 'remote' ? 'remote' : 'local' });
   if (process.env.E2E_EXPECTED_COMMIT_SHA) {
     expect(release.commit).toBe(process.env.E2E_EXPECTED_COMMIT_SHA);
   }

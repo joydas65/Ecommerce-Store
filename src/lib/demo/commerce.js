@@ -120,6 +120,19 @@ export function createDemoCommerce({ storage, delayMs = 200 } = {}) {
   }
 
   return {
+    // Internal adapter boundary: clear only the exact cart that was reviewed.
+    // A later mutation in another tab must survive a delayed order response.
+    demo: {
+      snapshot: () => copy(read()),
+      completeSnapshot: (snapshot) => {
+        const current = read();
+        if (current.id !== snapshot.id || current.revision !== snapshot.revision) {
+          return { cart: cartView(current), cleanupComplete: true };
+        }
+        const next = save(newCart());
+        return { cart: cartView(next), cleanupComplete: !storageFailed };
+      },
+    },
     products: { list: run(() => ({ data: catalog.map(productDetails) })) },
     cart: {
       retrieve: run(() => cartView(read())),

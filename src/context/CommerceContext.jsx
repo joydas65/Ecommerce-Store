@@ -2,7 +2,7 @@
 
 import { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react';
 import { commerce } from '../lib/commerce';
-import { isDemoMode } from '../lib/commerce-mode';
+import { isDemoMode, isPersistentDemo } from '../lib/commerce-mode';
 import { DEMO_CART_STORAGE_KEY } from '../lib/demo/storage-key';
 
 const CommerceContext = createContext(null);
@@ -87,20 +87,24 @@ export function CommerceProvider({ children }) {
     }
   };
 
-  const handleCaptureCheckout = async (checkoutTokenId, newOrder) => {
-    const incomingOrder = await commerce.checkout.capture(checkoutTokenId, newOrder);
+  const confirmOrder = (incomingOrder) => {
     if (!incomingOrder?.id) {
       throw new Error('We could not confirm your order. Please contact the store before trying again.');
     }
-    if (incomingOrder.status_payment && !['paid', 'authorized'].includes(incomingOrder.status_payment)) {
+    if (isPersistentDemo ? (!incomingOrder.demo || !incomingOrder.persistent || incomingOrder.status_payment !== 'simulated')
+      : incomingOrder.status_payment && !['paid', 'authorized'].includes(incomingOrder.status_payment)) {
       throw new Error('Your order payment has not been confirmed. Please contact the store before trying again.');
     }
 
     // Cart synchronization must not turn a confirmed purchase into a payment failure.
-    setCart({ line_items: [], total_items: 0 });
+    if (isPersistentDemo) {
+      if (incomingOrder.cart) setCart(incomingOrder.cart);
+    } else setCart({ line_items: [], total_items: 0 });
     commerce.cart.refresh().then(setCart).catch(() => {});
     return incomingOrder;
   };
+  const handleCaptureCheckout = async (checkoutTokenId, newOrder) => confirmOrder(await commerce.checkout.capture(checkoutTokenId, newOrder));
+  const handleRecoverCheckout = async () => confirmOrder(await commerce.checkout.recover());
 
   return (
     <CommerceContext.Provider value={{
@@ -111,7 +115,7 @@ export function CommerceProvider({ children }) {
       handleUpdateCartQty: (id, quantity) => changeCart(() => commerce.cart.update(id, { quantity })),
       handleRemoveFromCart: (id) => changeCart(() => commerce.cart.remove(id)),
       handleEmptyCart: () => changeCart(() => commerce.cart.empty()),
-      handleCaptureCheckout,
+      handleCaptureCheckout, handleRecoverCheckout,
     }}>
       {children}
     </CommerceContext.Provider>

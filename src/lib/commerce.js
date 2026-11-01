@@ -1,4 +1,4 @@
-import { isDemoMode } from './commerce-mode';
+import { isDemoMode, isPersistentDemo } from './commerce-mode';
 
 // Both implementations satisfy the small storefront contract below. Loading a
 // route on the server never initializes storage, the SDK, or provider requests.
@@ -10,7 +10,9 @@ async function getClient() {
   }
   if (!clientPromise) {
     clientPromise = (isDemoMode
-      ? import('./demo/commerce').then(({ createDemoCommerce }) => createDemoCommerce())
+      ? isPersistentDemo
+        ? import('./orders/persistent-demo').then(({ createPersistentDemoCommerce }) => createPersistentDemoCommerce())
+        : import('./demo/commerce').then(({ createDemoCommerce }) => createDemoCommerce())
       : loadLiveCommerce()
     ).catch((error) => {
       clientPromise = undefined;
@@ -44,6 +46,6 @@ const call = (resource, method) => async (...args) => {
 export const commerce = {
   products: { list: call('products', 'list') },
   cart: Object.fromEntries(['retrieve', 'add', 'update', 'remove', 'empty', 'refresh'].map((method) => [method, call('cart', method)])),
-  checkout: Object.fromEntries(['generateToken', 'getShippingOptions', 'checkShippingOption', 'setTaxZone', 'capture'].map((method) => [method, call('checkout', method)])),
+  checkout: Object.fromEntries(['generateToken', 'getShippingOptions', 'checkShippingOption', 'setTaxZone', 'capture', 'pending', 'recover'].map((method) => [method, call('checkout', method)])),
   services: Object.fromEntries(['localeListShippingCountries', 'localeListSubdivisions'].map((method) => [method, call('services', method)])),
 };

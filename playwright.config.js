@@ -1,6 +1,7 @@
 import { defineConfig, devices } from '@playwright/test';
 
 const mode = process.env.E2E_MODE === 'live' ? 'live' : 'demo';
+const persistentOrders = mode === 'demo' && process.env.E2E_ORDER_STORAGE === 'remote';
 const deployedURL = process.env.E2E_BASE_URL?.trim();
 if (process.env.E2E_DEPLOYED && !deployedURL) {
   throw new Error('E2E_BASE_URL is required for deployed-site checks.');
@@ -15,12 +16,12 @@ if (deployedURL) {
   if (mode !== 'demo') throw new Error('Deployed-site checks only run against the simulated demo.');
 }
 const baseURL = deployedURL ? new URL(deployedURL).origin : 'http://127.0.0.1:3100';
-const reportName = deployedURL ? 'deployed' : mode;
+const reportName = deployedURL ? 'deployed' : persistentOrders ? 'persistent' : mode;
 const htmlReporter = ['html', { open: 'never', outputFolder: `playwright-report/${reportName}` }];
 
 export default defineConfig({
   testDir: './e2e',
-  testMatch: mode === 'live' ? 'foundation.spec.js' : ['demo.spec.js', 'deployment.spec.js', 'catalog.spec.js', 'product.spec.js', 'discovery.spec.js'],
+  testMatch: mode === 'live' ? 'foundation.spec.js' : ['demo.spec.js', 'deployment.spec.js', 'catalog.spec.js', 'product.spec.js', 'discovery.spec.js', ...(persistentOrders ? ['persistent-orders.spec.js'] : [])],
   outputDir: `test-results/${reportName}`,
   timeout: deployedURL ? 90_000 : 30_000,
   expect: { timeout: deployedURL ? 10_000 : 5_000 },
@@ -51,6 +52,12 @@ export default defineConfig({
     env: {
       NEXT_TELEMETRY_DISABLED: '1',
       NEXT_PUBLIC_COMMERCE_MODE: mode,
+      NEXT_PUBLIC_DEMO_ORDER_STORAGE: persistentOrders ? 'remote' : 'local',
+      ...(persistentOrders ? {
+        ORDERS_API_URL: process.env.ORDERS_API_URL || 'http://127.0.0.1:4100',
+        ORDERS_ALLOW_LOCAL_API: 'true',
+        ORDERS_API_SECRET: process.env.ORDERS_API_SECRET || 'local-orders-test-secret-at-least-32-characters',
+      } : {}),
       NEXT_PUBLIC_COMMERCE_PUBLIC_KEY: '',
       NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY: '',
     },

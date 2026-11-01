@@ -8,11 +8,18 @@ import { commerce } from '../../../lib/commerce';
 import AddressForm from '../AddressForm';
 import PaymentForm from '../PaymentForm';
 import styles from './styles';
-import { isDemoMode } from '../../../lib/commerce-mode';
+import { isDemoMode, isPersistentDemo } from '../../../lib/commerce-mode';
 
 const steps = ['Shipping address', isDemoMode ? 'Simulated payment' : 'Payment details'];
 
-const CheckoutSession = ({ cart, onCaptureCheckout, order, onComplete }) => {
+const readPendingCheckout = async () => {
+  try { return await commerce.checkout.pending(); }
+  catch {
+    return { unreadable: true, message: 'We could not check your previous checkout. Retry the recovery check before placing another order.' };
+  }
+};
+
+const CheckoutSession = ({ cart, onCaptureCheckout, order, onComplete, notice = '' }) => {
   const [checkoutToken, setCheckoutToken] = useState(null);
   const [activeStep, setActiveStep] = useState(0);
   const [shippingData, setShippingData] = useState({});
@@ -112,6 +119,7 @@ const CheckoutSession = ({ cart, onCaptureCheckout, order, onComplete }) => {
           <Stepper activeStep={activeStep} sx={styles.stepper}>
             {steps.map((label) => <Step key={label}><StepLabel>{label}</StepLabel></Step>)}
           </Stepper>
+          {!order && notice && <Typography role="alert" sx={{ mb: 2 }}>{notice}</Typography>}
           {order ? (
             <>
               <Typography component="h2" variant="h5" ref={confirmationHeading} tabIndex={-1} sx={{ scrollMarginTop: 96 }}>{order.demo ? 'Demo order complete' : `Thank you for your purchase${order.customer?.firstname ? `, ${order.customer.firstname}` : ''}!`}</Typography>
@@ -119,6 +127,7 @@ const CheckoutSession = ({ cart, onCaptureCheckout, order, onComplete }) => {
               <Divider sx={styles.divider} />
               <Typography variant="subtitle2">Order ref: {order.customer_reference || order.id}</Typography>
               <br />
+              {order.persistent && <Button component={Link} variant="contained" href={order.receipt_url} sx={{ mr: 2, mb: 2 }}>View saved receipt</Button>}
               <Button component={Link} variant="outlined" href="/">Back to home</Button>
             </>
           ) : isEmpty ? (
@@ -150,23 +159,91 @@ const CheckoutSession = ({ cart, onCaptureCheckout, order, onComplete }) => {
   );
 };
 
-const Checkout = ({ cart, onCaptureCheckout }) => {
+const Checkout = ({ cart, onCaptureCheckout, onRecoverCheckout }) => {
   const [order, setOrder] = useState(null);
   const [capturingCart, setCapturingCart] = useState(null);
+  const [pending, setPending] = useState(null);
+  const [pendingStatus, setPendingStatus] = useState(isPersistentDemo ? 'loading' : 'ready');
+  const [recovering, setRecovering] = useState(false);
+  const [recoveryError, setRecoveryError] = useState('');
+  const [recoveryNotice, setRecoveryNotice] = useState('');
+  const recoveryLock = useRef(false);
+
+  useEffect(() => {
+    if (!isPersistentDemo) return;
+    let active = true;
+    readPendingCheckout().then((attempt) => {
+      if (active) { setPending(attempt); setPendingStatus('ready'); }
+    });
+    return () => { active = false; };
+  }, []);
+
+  const retryPendingCheck = async () => {
+    setPendingStatus('loading');
+    const attempt = await readPendingCheckout();
+    setPending(attempt);
+    setPendingStatus('ready');
+  };
+
+  const recover = async () => {
+    if (recoveryLock.current) return;
+    recoveryLock.current = true;
+    setRecovering(true);
+    setRecoveryError('');
+    setCapturingCart(cart);
+    try {
+      const recovered = await onRecoverCheckout();
+      setOrder(recovered);
+      setPending(null);
+    } catch (error) {
+      const message = error?.message || 'Your order could not be recovered. Please try again.';
+      const attempt = await readPendingCheckout();
+      setPending(attempt);
+      setRecoveryError(message);
+      if (!attempt) setRecoveryNotice(`${message} Review your shipping details below before starting a new checkout.`);
+      setCapturingCart(null);
+    } finally {
+      recoveryLock.current = false;
+      setRecovering(false);
+    }
+  };
 
   const captureCheckout = async (tokenId, orderData) => {
     // The provider may refresh the cart before capture resolves. Keep this
     // checkout session mounted until its order is confirmed or rejected.
     setCapturingCart(cart);
+    setRecoveryNotice('');
     try {
       return await onCaptureCheckout(tokenId, orderData);
     } catch (error) {
+      if (isPersistentDemo) setPending(await readPendingCheckout());
       setCapturingCart(null);
       throw error;
     }
   };
 
   const sessionCart = capturingCart || cart;
+  if (pendingStatus === 'loading' && !order) return (
+    <Box component="main" sx={styles.layout}>
+      <Paper sx={styles.paper}>
+        <Typography component="h1" variant="h4" gutterBottom>Checkout</Typography>
+        <CircularProgress aria-label="Checking previous checkout" />
+      </Paper>
+    </Box>
+  );
+  if (pending && !order) return (
+    <Box component="main" sx={styles.layout}>
+      <Paper sx={styles.paper}>
+        <Typography component="h1" variant="h4">Recover your demo order</Typography>
+        <Typography sx={{ my: 2 }}>A previous checkout is awaiting confirmation. Recover that attempt before starting another purchase; it may already be saved.</Typography>
+        {pending.unreadable && <Typography role="alert" color="error">{pending.message}</Typography>}
+        {recoveryError && <Typography role="alert" color="error" sx={{ my: 2 }}>{recoveryError}</Typography>}
+        <Button variant="contained" onClick={recover} disabled={recovering || pending.unreadable} aria-busy={recovering}>{recovering ? 'Recovering order…' : 'Recover pending order'}</Button>
+        {pending.unreadable && <Button onClick={retryPendingCheck} sx={{ ml: 2 }}>Retry recovery check</Button>}
+        <Button component={Link} href="/cart" sx={{ ml: 2 }}>Back to cart</Button>
+      </Paper>
+    </Box>
+  );
   return (
     <CheckoutSession
       key={sessionCart.id}
@@ -174,6 +251,7 @@ const Checkout = ({ cart, onCaptureCheckout }) => {
       order={order}
       onCaptureCheckout={captureCheckout}
       onComplete={setOrder}
+      notice={recoveryNotice}
     />
   );
 };

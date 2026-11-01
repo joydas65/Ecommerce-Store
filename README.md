@@ -6,7 +6,7 @@ A Next.js storefront with a seeded demo you can purchase from without merchant c
 
 The portfolio direction is a polished, single-store commerce demo that shows the complete journey from a shopper placing an order to a merchant managing it. The goal is to demonstrate senior full-stack engineering through clear product decisions, reliable transactions, maintainable boundaries, and evidence from tests.
 
-**Current status:** the Next.js foundation and credential-free purchasing demo are deployed on Vercel. GitHub CI and deployed purchase checks gate production releases. Demo orders are explicitly simulated. Commerce APIs, a database, and merchant tools remain planned.
+**Current status:** the Next.js storefront is deployed on Vercel. Remote demo mode supports persistent orders through a separate Node.js service and PostgreSQL, with reloadable private receipts and recovery after a lost response. GitHub CI and deployed purchase checks gate releases. Payments remain explicitly simulated; merchant tools remain planned.
 
 The [Vercel release guide](docs/deployment.md) documents deployment checks, project configuration, release verification, and rollback recovery.
 
@@ -20,6 +20,7 @@ The [Vercel release guide](docs/deployment.md) documents deployment checks, proj
 - Keyboard navigation, a skip link, and verified catalog layouts at phone, tablet, and desktop widths.
 - Six seeded products with local illustrations, a cart that survives reloads, sample address entry, and simulated order confirmations.
 - A controlled payment failure that preserves the cart and lets the shopper retry.
+- When remote order storage is enabled: server-calculated quotes, durable orders, private `/orders/[id]` receipts, and duplicate-safe recovery after a timeout or reload.
 - Shipping country, region, and delivery-method selection, including countries without regions.
 - Order review based on the selected provider's shipping and tax calculations.
 - Confirmation only after a successful capture returns an order; references come from the provider.
@@ -50,6 +51,9 @@ flowchart LR
     UI -->|Shipping and checkout operations| Adapter
     Adapter -->|Default demo| Demo[Seeded local provider]
     Demo --> Cart[Browser cart storage]
+    Adapter -->|Remote demo orders| BFF[Same-origin Next.js order routes]
+    BFF -->|Server-only credential| Orders[Node.js order service]
+    Orders --> DB[(PostgreSQL)]
     Adapter -->|Explicit live mode| Commerce[Commerce.js API]
     UI -->|Live payment method creation| Stripe[Stripe.js / Elements]
     Stripe -->|Payment method identifier| UI
@@ -57,9 +61,11 @@ flowchart LR
 
 `src/app` owns routing, metadata, the shared layout, and UI providers. `src/context/CommerceContext.jsx` preserves catalog and cart state across route navigation. Components under `src/components/CheckoutForm` collect the address, request totals, submit payment, and display the returned order.
 
-`src/lib/commerce.js` selects a provider lazily in the browser. Demo is the default; only `NEXT_PUBLIC_COMMERCE_MODE=live` selects Commerce.js. Merchant keys alone never enable live payments, and a live error never falls back to a simulated success. Importing or building a route does not initialize either provider. Product detail routes read independently through `src/lib/product-reader.js`; their content and metadata render on the server, with a small client purchase control. Demo pages are pre-rendered from local fixtures. Live detail reads use bounded, uncached requests to the merchant API and distinguish missing products from temporary failures. The catalog list, cart state, and checkout remain client-side. `/api/health` exposes public release identity; commerce API endpoints and a database remain planned.
+`src/lib/commerce.js` selects a provider lazily in the browser. Demo is the default; only `NEXT_PUBLIC_COMMERCE_MODE=live` selects Commerce.js. Merchant keys alone never enable live payments, and a live error never falls back to a simulated success. Importing or building a route does not initialize either provider. Product detail routes read independently through `src/lib/product-reader.js`; their content and metadata render on the server, with a small client purchase control. Demo pages are pre-rendered from local fixtures. Live detail reads use bounded, uncached requests to the merchant API and distinguish missing products from temporary failures. The catalog list, cart state, and checkout remain client-side. `/api/health` exposes public release identity and configured order-storage mode, not database readiness.
 
-The demo provider uses integer cents, $5 standard or $12 express shipping, and a clearly labeled **8% sample tax** on products plus shipping. These are demonstration rules, not real tax or delivery quotes. Cart storage contains product IDs, quantities, and cart identity/version only. Address details and payment data are not saved or sent to a merchant. If browser storage is unavailable, the cart works in memory for the current page session.
+Remote demo checkout is enabled by `NEXT_PUBLIC_DEMO_ORDER_STORAGE=remote`. Same-origin Next.js routes own an HttpOnly guest cookie and call [Ecommerce-Orders](https://github.com/joydas65/Ecommerce-Orders) using a server-only credential. PostgreSQL transactions persist a price snapshot, one order per quote, and the idempotency result together. The browser stores a recovery key before submitting and only clears the matching cart after validating a confirmed receipt. Remote failures never fall back to a local success. See [the persistent-order decision](docs/decisions/0006-persistent-demo-orders.md).
+
+The demo uses integer cents, $5 standard or $12 express shipping, and a clearly labeled **8% sample tax** on products plus shipping. These are demonstration rules, not real tax or delivery quotes. Cart storage contains product IDs, quantities, and cart identity/version only. Remote recovery adds a quote ID, idempotency key, and cart identity/version. Names, email, street address and payment details are never sent to the demo order service. If browser storage is unavailable, browsing and the cart work in memory, but remote order submission stops before sending an order because safe recovery cannot be guaranteed.
 
 The SDK’s Axios dependency is pinned to the patched 0.34.0 release through a scoped override. Contract tests cover the request and response shapes used by this app.
 
@@ -87,6 +93,24 @@ Open [localhost:3000](http://localhost:3000). **No environment file, merchant ac
 ### Share a collection view
 
 Try [desk products sorted by price](https://joys-store.vercel.app/?q=desk&sort=price-asc#products). Search is applied with **Search** or Enter; sorting applies immediately. **Clear search** keeps the sort, while **Reset filters** restores the featured collection. Reloading, copying the URL, and browser Back/Forward restore the applied view.
+
+### Optional persistent demo orders
+
+Start [Ecommerce-Orders](https://github.com/joydas65/Ecommerce-Orders) with its local PostgreSQL setup, then add these values to the storefront's ignored `.env.local`:
+
+```dotenv
+NEXT_PUBLIC_COMMERCE_MODE=demo
+NEXT_PUBLIC_DEMO_ORDER_STORAGE=remote
+ORDERS_API_URL=http://127.0.0.1:4100
+ORDERS_ALLOW_LOCAL_API=true
+ORDERS_API_SECRET=local-orders-test-secret-at-least-32-characters
+```
+
+Use the same **local-only** fixture secret in the backend. Restart or rebuild the storefront after changing a public mode variable. Production requires a separate random secret and an HTTPS backend origin; loopback URLs are rejected on Vercel. Never prefix the service secret with `NEXT_PUBLIC_`.
+
+Complete a purchase and choose **View saved receipt**. Reloading retains the order. Another browser cannot access it, and clearing cookies removes access. If the commit response is lost, **Recover pending order** retries the same submission rather than creating another one.
+
+Remote checkout requires browser storage and the Web Locks API, available in current major browsers on HTTPS (or localhost for development). This coordinates submissions across tabs; unavailable coordination stops submission rather than risking an unrecoverable order.
 
 ### Optional live mode
 
@@ -121,6 +145,7 @@ npm start
 | `npm run test:e2e` | Run demo purchase tests, then live-mode foundation checks against separate production builds |
 | `npm run test:e2e:demo` | Run only the seeded purchase and recovery browser tests |
 | `npm run test:e2e:live` | Run only the live-mode checks with merchant keys deliberately absent |
+| `npm run test:e2e:persistent` | Run the demo suite plus real persistent purchase, receipt and recovery checks; requires the local Node service and PostgreSQL |
 | `npm run test:e2e:deployed` | Verify a public demo deployment using `E2E_BASE_URL` and optional `E2E_EXPECTED_COMMIT_SHA` |
 
 Install Playwright's browser before the first browser-test run:
@@ -152,20 +177,21 @@ Each milestone should leave a working, demonstrable application. Scope is one st
 | 1b. Reproducible purchasing demo | Implemented: seeded products, explicit simulation mode, simulated purchases, and controlled failure recovery | Provider interfaces, deterministic testing, integration design |
 | 1c. Vercel release foundation | Deployed: Git integration, previews, CI and deployed purchase gates, release identity, and recovery instructions | Deployment safety, least-privilege automation, verifiable releases |
 | 2. Complete shopper experience | Catalog branding, responsive cards, keyboard access, confirmed add feedback, directly linked product detail pages, and search/sorting with shareable URLs implemented | Product judgment, accessibility, frontend architecture |
-| 3. Full-stack order workflow | Planned: application API and database, authoritative price/availability checks, persisted orders, and authenticated merchant order management | Data modeling, authorization, concurrency, transaction boundaries |
-| 4. Reliable operation | Planned: duplicate-safe processing, provider reconciliation, deeper browser/API tests, structured diagnostics, and recovery instructions | Failure handling, observability, security, operating a service |
+| 3. Full-stack order workflow | Persistent demo orders, authoritative price quotes, private receipts and guest authorization implemented; stock reservations and merchant administration remain planned | Data modeling, authorization, concurrency, transaction boundaries |
+| 4. Reliable operation | Duplicate-safe demo submissions, response-loss recovery and real database/browser tests implemented; live provider reconciliation and broader monitoring remain planned | Failure handling, observability, security, operating a service |
 | 5. Interview presentation | Hosted demo and decision records available; a polished walkthrough, screenshots, and broader measured results remain planned | Explaining tradeoffs and supporting claims with evidence |
 
-### Next milestone: full-stack order workflow
+### Next milestone: merchant order workflow
 
-Establish an application API and persistent order model, with authoritative prices and totals and a bounded merchant workflow. Keep simulated orders explicit while demonstrating transaction boundaries and recovery across browser sessions.
+Build a bounded, authenticated merchant view on the persistent order model, with explicit permissions and an audit trail. Keep simulated purchases clear and avoid adding real payment handling before reconciliation and operational controls are designed.
 
 ## Current limits
 
 - Search and sorting operate on the loaded collection. All six demo products are included; live merchant pagination and server-side full-catalog search remain future work.
-- The demo is browser-local. It does not reserve stock, process money, persist real orders, or synchronize accounts across devices.
-- Checkout tokens and simulated confirmations live in memory. Reloading checkout starts again with the saved cart; reloading a completed order shows the now-empty cart.
+- The default local demo stores only the cart in the browser. Remote mode persists synthetic orders; neither mode reserves stock, processes money, or synchronizes customer accounts across devices.
+- Remote receipts are private to the guest cookie and expire after 30 days. They are not a substitute for authenticated customer order history.
 - Live shipping and tax amounts come from Commerce.js; demo totals use the documented sample rules.
-- In-flight button protection applies to the current UI session. Server-side idempotency and recovery after ambiguous payment outcomes remain future work.
-- A functioning merchant account is still needed for real catalog and checkout behavior. Provider sandbox checks, application order persistence, and operational monitoring remain future work.
+- Remote submissions are idempotent per guest and request key, and one quote can create only one order. Independent new quotes are independent purchases; this does not implement payment-provider reconciliation.
+- A functioning merchant account is still needed for real catalog and checkout behavior. Provider sandbox checks and broader operational monitoring remain future work.
+- Free-plan quotas can pause the hosted order service. Production commercial use requires a plan review; the demo does not claim an availability SLA.
 - Planned features and metrics should be presented as completed only after implementation and verification.

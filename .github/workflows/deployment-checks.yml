@@ -83,6 +83,7 @@ jobs:
         env:
           E2E_BASE_URL: ${{ needs.validate.outputs.url }}
           E2E_EXPECTED_COMMIT_SHA: ${{ needs.validate.outputs.sha }}
+          E2E_ORDER_STORAGE: ${{ needs.validate.outputs.environment == 'production' && vars.DEMO_ORDER_STORAGE || 'local' }}
       - name: Save deployed browser report
         if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
