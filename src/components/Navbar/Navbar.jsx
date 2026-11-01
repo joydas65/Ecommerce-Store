@@ -21,8 +21,8 @@ const Navbar = ({ totalItems }) => {
         </Typography>
         <Box sx={styles.grow} />
         {pathname === '/' && (
-          <IconButton component={Link} href="/cart" aria-label="Show cart items" color="inherit">
-            <Badge badgeContent={totalItems} color="secondary">
+          <IconButton component={Link} href="/cart" aria-label={`Show cart items (${totalItems})`} color="inherit">
+            <Badge badgeContent={totalItems} max={999} color="secondary">
               <ShoppingCart />
             </Badge>
           </IconButton>

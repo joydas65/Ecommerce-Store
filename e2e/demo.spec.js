@@ -1,35 +1,8 @@
-import { test as base, expect } from '@playwright/test';
-
-// Exercise the actual demo adapter. Any remote service, broken rendering, or
-// browser exception fails the flow, even when the visible assertions succeed.
-const test = base.extend({
-  browserHealth: [async ({ context, page, baseURL }, use) => {
-    const errors = [];
-    const externalRequests = [];
-    const origin = new URL(baseURL).origin;
-    const observe = (tab) => {
-      tab.on('pageerror', (error) => errors.push(error.message));
-      tab.on('console', (message) => {
-        if (message.type() === 'error' && /hydration|did not match|server rendered/i.test(message.text())) {
-          errors.push(message.text());
-        }
-      });
-    };
-    observe(page);
-    context.on('page', observe);
-    context.on('request', (request) => {
-      const url = new URL(request.url());
-      if (/^https?:$/.test(url.protocol) && url.origin !== origin) externalRequests.push(request.url());
-    });
-    await use();
-    expect(errors, 'Browser and hydration errors').toEqual([]);
-    expect(externalRequests, 'Demo must not request external services or assets').toEqual([]);
-  }, { auto: true }],
-});
+import { test, expect } from './demo-fixture';
 
 async function addProduct(page, name, expectedItems) {
   await page.getByRole('button', { name: `Add ${name} to cart`, exact: true }).click();
-  await expect(page.getByRole('link', { name: 'Show cart items' })).toHaveText(String(expectedItems));
+  await expect(page.getByRole('link', { name: /^Show cart items/ })).toHaveText(String(expectedItems));
 }
 
 async function sampleAddress(page) {
@@ -56,7 +29,7 @@ test('browses local products, persists a cart, and completes a simulated purchas
 
   await addProduct(page, 'Desk Mat', 1);
   await addProduct(page, 'Notebook', 2);
-  await page.getByRole('link', { name: 'Show cart items' }).click();
+  await page.getByRole('link', { name: /^Show cart items/ }).click();
   await expect(page.getByText('Subtotal: $46.00', { exact: true })).toBeVisible();
   await page.getByRole('button', { name: 'Increase Desk Mat quantity', exact: true }).click();
   await expect(page.getByText('Subtotal: $80.00', { exact: true })).toBeVisible();
@@ -89,7 +62,7 @@ test('preserves the cart after a controlled payment failure and allows a success
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto('/');
   await addProduct(page, 'Notebook', 1);
-  await page.getByRole('link', { name: 'Show cart items' }).click();
+  await page.getByRole('link', { name: /^Show cart items/ }).click();
   await page.getByRole('link', { name: 'Checkout', exact: true }).click();
   await sampleAddress(page);
   await page.getByRole('button', { name: 'Next', exact: true }).click();
@@ -133,7 +106,7 @@ test('handles direct entry to an empty checkout without a loading loop', async (
 test('updates a stale checkout after another tab purchases and can start a new order', async ({ page, context }) => {
   await page.goto('/');
   await addProduct(page, 'Notebook', 1);
-  await page.getByRole('link', { name: 'Show cart items' }).click();
+  await page.getByRole('link', { name: /^Show cart items/ }).click();
   await page.getByRole('link', { name: 'Checkout', exact: true }).click();
   await sampleAddress(page);
   await page.getByRole('button', { name: 'Next', exact: true }).click();
@@ -149,7 +122,7 @@ test('updates a stale checkout after another tab purchases and can start a new o
   await expect(page.getByText('Your cart is empty. Add a product to start checkout.', { exact: true })).toBeVisible();
   await page.getByRole('link', { name: 'Browse products', exact: true }).click();
   await addProduct(page, 'Bottle', 1);
-  await page.getByRole('link', { name: 'Show cart items' }).click();
+  await page.getByRole('link', { name: /^Show cart items/ }).click();
   await page.getByRole('link', { name: 'Checkout', exact: true }).click();
   await sampleAddress(page);
   await page.getByRole('button', { name: 'Next', exact: true }).click();

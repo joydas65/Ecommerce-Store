@@ -29,6 +29,17 @@ jobs:
       - run: npm ci
       - run: npm run lint
       - run: npm run test:ci
+      - run: node --test scripts/release/*.test.mjs
       - run: npx playwright install --with-deps chromium
       # Build demo purchase flows, then live-mode unavailable states, without merchant keys.
       - run: npm run test:e2e
+      - name: Save browser reports
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: local-browser-reports
+          path: |
+            playwright-report
+            test-results
+          if-no-files-found: ignore
+          retention-days: 7

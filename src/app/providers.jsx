@@ -7,7 +7,7 @@ import { CommerceProvider, useCommerce } from '../context/CommerceContext';
 import { isDemoMode } from '../lib/commerce-mode';
 
 const theme = createTheme({
-  palette: { primary: { main: '#3f51b5' }, secondary: { main: '#f50057' } },
+  palette: { primary: { main: '#3f51b5' }, secondary: { main: '#c51162' } },
 });
 
 function StoreShell({ children }) {

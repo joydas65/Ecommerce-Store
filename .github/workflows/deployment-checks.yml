@@ -1,0 +1,129 @@
+name: Verify Vercel deployment
+
+# ready is emitted after the build and BEFORE production checks/promotion.
+# deployment_status:success would be too late to gate the production alias.
+on:
+  repository_dispatch:
+    types: [vercel.deployment.ready]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: vercel-check-${{ github.event.client_payload.id }}
+  cancel-in-progress: true
+
+jobs:
+  validate:
+    name: Validate Vercel deployment event
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    permissions:
+      contents: read
+      statuses: write
+    outputs:
+      sha: ${{ steps.event.outputs.sha }}
+      ref: ${{ steps.event.outputs.ref }}
+      url: ${{ steps.event.outputs.url }}
+      environment: ${{ steps.event.outputs.environment }}
+      statusContext: ${{ steps.event.outputs.statusContext }}
+    steps:
+      # Dispatch workflows and this validator come from trusted default-branch code.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .nvmrc
+      - id: event
+        name: Validate project, sender, URL and repository branch
+        run: node scripts/release/validate-vercel-event.mjs
+        env:
+          VERCEL_PROJECT_ID: ${{ vars.VERCEL_PROJECT_ID }}
+          VERCEL_PROJECT_NAME: ${{ vars.VERCEL_PROJECT_NAME }}
+          GH_TOKEN: ${{ github.token }}
+      - name: Mark the deployed commit pending
+        uses: actions/github-script@373c709c69115d41ff229c7e5df9f8788daa9553 # v9
+        env:
+          DEPLOYMENT_SHA: ${{ steps.event.outputs.sha }}
+          STATUS_CONTEXT: ${{ steps.event.outputs.statusContext }}
+        with:
+          script: |
+            await github.rest.repos.createCommitStatus({
+              ...context.repo, sha: process.env.DEPLOYMENT_SHA,
+              state: 'pending', context: process.env.STATUS_CONTEXT,
+              description: 'Checking the deployed demo purchase flow',
+              target_url: `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`,
+            });
+
+  browser:
+    name: Check deployed storefront
+    needs: validate
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    # Use the trusted default-branch harness against the validated public URL.
+    # No deployment token or bypass secret is available to the browser process.
+    permissions:
+      contents: read
+    env:
+      NEXT_TELEMETRY_DISABLED: '1'
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - name: Purchase, recovery and deployed-page checks
+        run: npm run test:e2e:deployed
+        env:
+          E2E_BASE_URL: ${{ needs.validate.outputs.url }}
+          E2E_EXPECTED_COMMIT_SHA: ${{ needs.validate.outputs.sha }}
+      - name: Save deployed browser report
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: deployed-browser-${{ github.event.client_payload.id }}
+          path: |
+            playwright-report/deployed
+            test-results/deployed
+          if-no-files-found: ignore
+          retention-days: 7
+
+  report:
+    name: Report deployed commit result
+    if: always() && needs.validate.result == 'success'
+    needs: [validate, browser]
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    permissions:
+      contents: read
+      statuses: write
+    steps:
+      # Keep write access in a job that never checks out or runs deployment code.
+      - uses: actions/github-script@373c709c69115d41ff229c7e5df9f8788daa9553 # v9
+        env:
+          DEPLOYMENT_SHA: ${{ needs.validate.outputs.sha }}
+          DEPLOYMENT_REF: ${{ needs.validate.outputs.ref }}
+          STATUS_CONTEXT: ${{ needs.validate.outputs.statusContext }}
+          BROWSER_RESULT: ${{ needs.browser.result }}
+        with:
+          script: |
+            const branch = await github.rest.git.getRef({
+              ...context.repo, ref: `heads/${process.env.DEPLOYMENT_REF}`,
+            });
+            const current = branch.data.object.sha === process.env.DEPLOYMENT_SHA;
+            const passed = current && process.env.BROWSER_RESULT === 'success';
+            await github.rest.repos.createCommitStatus({
+              ...context.repo, sha: process.env.DEPLOYMENT_SHA,
+              state: passed ? 'success' : 'failure', context: process.env.STATUS_CONTEXT,
+              description: !current ? 'Superseded by a newer branch commit' : passed
+                ? 'Deployed demo purchase and recovery checks passed'
+                : 'Deployed browser checks did not pass',
+              target_url: `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`,
+            });
+            if (!passed) core.setFailed('Deployment did not pass release verification.');

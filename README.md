@@ -6,6 +6,8 @@ The portfolio direction is a polished, single-store commerce demo that shows the
 
 **Current status:** the Next.js foundation and credential-free purchasing demo are implemented. Demo orders are explicitly simulated. Application APIs, a database, and merchant tools remain planned.
 
+The [Vercel release guide](docs/deployment.md) documents deployment checks, project configuration, release verification, and rollback recovery.
+
 ## What works today
 
 - Next.js App Router routes for the catalog (`/`), cart (`/cart`), and checkout (`/checkout`), including direct navigation and reloads.
@@ -45,7 +47,7 @@ flowchart LR
 
 `src/app` owns routing, metadata, the shared layout, and UI providers. `src/context/CommerceContext.jsx` preserves catalog and cart state across route navigation. Components under `src/components/CheckoutForm` collect the address, request totals, submit payment, and display the returned order.
 
-`src/lib/commerce.js` selects a provider lazily in the browser. Demo is the default; only `NEXT_PUBLIC_COMMERCE_MODE=live` selects Commerce.js. Merchant keys alone never enable live payments, and a live error never falls back to a simulated success. Importing or building a route does not initialize either provider. The application shell is rendered by Next.js; product data, cart state, and checkout remain client-side. There are no application API endpoints or database yet.
+`src/lib/commerce.js` selects a provider lazily in the browser. Demo is the default; only `NEXT_PUBLIC_COMMERCE_MODE=live` selects Commerce.js. Merchant keys alone never enable live payments, and a live error never falls back to a simulated success. Importing or building a route does not initialize either provider. The application shell is rendered by Next.js; product data, cart state, and checkout remain client-side. `/api/health` exposes public release identity; commerce API endpoints and a database remain planned.
 
 The demo provider uses integer cents, $5 standard or $12 express shipping, and a clearly labeled **8% sample tax** on products plus shipping. These are demonstration rules, not real tax or delivery quotes. Cart storage contains product IDs, quantities, and cart identity/version only. Address details and payment data are not saved or sent to a merchant. If browser storage is unavailable, the cart works in memory for the current page session.
 
@@ -105,6 +107,7 @@ npm start
 | `npm run test:e2e` | Run demo purchase tests, then live-mode foundation checks against separate production builds |
 | `npm run test:e2e:demo` | Run only the seeded purchase and recovery browser tests |
 | `npm run test:e2e:live` | Run only the live-mode checks with merchant keys deliberately absent |
+| `npm run test:e2e:deployed` | Verify a public demo deployment using `E2E_BASE_URL` and optional `E2E_EXPECTED_COMMIT_SHA` |
 
 Install Playwright's browser before the first browser-test run:
 
@@ -123,7 +126,7 @@ The Jest suite covers confirmed and failed captures, slow responses, duplicate s
 
 Playwright uses the real demo implementation to exercise browsing, cart mutations and reloads, shipping totals, completed purchases, and controlled failure recovery. It rejects off-origin HTTP requests, uncaught errors, and hydration errors in demo mode. A separate production build verifies live-mode unavailable states, direct navigation/reloads, and the not-found page without merchant keys. Reports for each mode are kept separately.
 
-[GitHub Actions](.github/workflows/ci.yml) runs lint, Jest, and the production Playwright checks on pushes and pull requests. Browser traces and screenshots are saved locally on failure. No merchant credentials are required by CI.
+[GitHub Actions](.github/workflows/ci.yml) runs lint, Jest, release-event validation, and production Playwright checks on pushes and pull requests. The [deployment workflow](.github/workflows/deployment-checks.yml) verifies Vercel's built demo before native Deployment Checks permit production promotion. Browser reports are retained as seven-day workflow artifacts. No merchant credentials are required by CI; see the [release guide](docs/deployment.md) for the external Vercel settings needed to enable the gate.
 
 ## Portfolio roadmap
 

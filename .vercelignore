@@ -1,0 +1,9 @@
+.git
+.next
+.vercel
+node_modules
+.env*
+coverage
+playwright-report
+test-results
+.DS_Store
