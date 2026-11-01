@@ -5,6 +5,7 @@ import '@testing-library/jest-dom';
 import { CommerceProvider, useCommerce } from './CommerceContext';
 import { commerce } from '../lib/commerce';
 
+jest.mock('../lib/storefront-config', () => ({ usesSeededCatalog: false, usesSimulatedPayment: false, usesPersistentOrders: false }));
 jest.mock('../lib/commerce', () => ({
   commerce: {
     products: { list: jest.fn() },
@@ -105,6 +106,23 @@ test('does not show an explicitly unpaid order as a completed purchase', async (
 
   expect(await screen.findByRole('alert')).toHaveTextContent('Your order payment has not been confirmed');
   expect(screen.queryByText(/Confirmed:/)).not.toBeInTheDocument();
+  expect(commerce.cart.refresh).not.toHaveBeenCalled();
+});
+
+test.each([undefined, '', 'processing', 'pending', 'simulated'])('requires explicit payment confirmation before clearing a legacy Stripe cart: %p', async (status_payment) => {
+  commerce.checkout.capture.mockResolvedValue({ id: 'order_1', status_payment });
+  await startCheckout();
+
+  expect(await screen.findByRole('alert')).toHaveTextContent('Your order payment has not been confirmed');
+  expect(screen.queryByText(/Confirmed:/)).not.toBeInTheDocument();
+  expect(screen.getByText('Cart items: 2')).toBeInTheDocument();
+  expect(commerce.cart.refresh).not.toHaveBeenCalled();
+});
+
+test('does not accept a simulated receipt as a legacy Stripe payment', async () => {
+  commerce.checkout.capture.mockResolvedValue({ ...confirmedOrder, demo: true });
+  await startCheckout();
+  expect(await screen.findByRole('alert')).toHaveTextContent('Your order payment has not been confirmed');
   expect(commerce.cart.refresh).not.toHaveBeenCalled();
 });
 

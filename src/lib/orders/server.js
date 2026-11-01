@@ -1,6 +1,6 @@
 import 'server-only';
 import { randomUUID } from 'node:crypto';
-import { isPersistentDemo } from '../commerce-mode';
+import { usesPersistentOrders } from '../storefront-config';
 
 const cookieName = 'joys_order_guest';
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -37,7 +37,7 @@ async function boundedBody(request) {
 }
 
 export async function forwardOrderRequest(request, path, { createGuest = false, fetchImpl = globalThis.fetch } = {}) {
-  if (!isPersistentDemo) return error(503, 'ORDERS_DISABLED', 'Persistent demo orders are not enabled in this environment.');
+  if (!usesPersistentOrders) return error(503, 'ORDERS_DISABLED', 'Persistent orders are not enabled in this environment.');
   const requestUrl = new URL(request.url);
   // Next.js can reconstruct the internal URL with localhost. Host retains the
   // browser's destination; unlike Origin, a browser script cannot override it.
@@ -57,7 +57,7 @@ export async function forwardOrderRequest(request, path, { createGuest = false, 
     catch { return error(400, 'INVALID_REQUEST', 'Send a valid JSON request smaller than 16 KB.'); }
   }
   const headers = { 'Content-Type': 'application/json', 'x-guest-id': guest };
-  if (path === '/v1/orders' && request.method === 'POST') {
+  if (['/v1/orders', '/v1/payment-sessions'].includes(path) && request.method === 'POST') {
     const key = request.headers.get('idempotency-key');
     if (!uuid.test(key || '')) return error(400, 'INVALID_REQUEST', 'A valid checkout recovery key is required.');
     headers['idempotency-key'] = key;

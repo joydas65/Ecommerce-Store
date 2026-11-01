@@ -7,9 +7,9 @@ import ProductLayout from './[slug]/layout';
 import ProductLoading from './[slug]/loading';
 import ProductNotFound from './not-found';
 
-let mockDemoMode = true;
+let mockSeededCatalog = true;
 
-jest.mock('../../lib/commerce-mode', () => ({ get isDemoMode() { return mockDemoMode; } }));
+jest.mock('../../lib/storefront-config', () => ({ get usesSeededCatalog() { return mockSeededCatalog; } }));
 jest.mock('../../lib/product-reader', () => ({ getProduct: jest.fn() }));
 jest.mock('next/navigation', () => ({
   notFound: jest.fn(() => { throw new Error('NEXT_HTTP_ERROR_FALLBACK;404'); }),
@@ -25,13 +25,13 @@ const product = productDetails(catalog[0]);
 const route = (slug = product.permalink) => ({ params: Promise.resolve({ slug }) });
 
 beforeEach(() => {
-  mockDemoMode = true;
+  mockSeededCatalog = true;
   getProduct.mockResolvedValue({ status: 'ready', product });
 });
 
 test('prebuilds every demo permalink and leaves live merchant routes to request-time reads', () => {
   expect(generateStaticParams()).toEqual(catalog.map(({ permalink }) => ({ slug: permalink })));
-  mockDemoMode = false;
+  mockSeededCatalog = false;
   expect(generateStaticParams()).toEqual([]);
 });
 
@@ -109,7 +109,7 @@ test('the demo layout rejects an unknown slug before rendering its loading bound
 });
 
 test('live mode bypasses the demo layout guard so merchant products can be resolved', async () => {
-  mockDemoMode = false;
+  mockSeededCatalog = false;
   const children = <main>Merchant content</main>;
   expect(await ProductLayout({ ...route('merchant-only-product'), children })).toBe(children);
   expect(notFound).not.toHaveBeenCalled();

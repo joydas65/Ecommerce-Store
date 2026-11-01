@@ -1,6 +1,6 @@
 # Vercel release and recovery
 
-This repository deploys the **simulated demo**, not the live merchant integration. `vercel.json` runs lint and Jest before a Next.js build explicitly using `NEXT_PUBLIC_COMMERCE_MODE=demo`. Preview and production deployments of this public portfolio project are intended to be publicly accessible. No merchant credentials, Vercel deployment token, or protection-bypass secret are supplied to the browser workflow.
+This repository deploys the **simulated demo**, not the live merchant integration. `vercel.json` runs lint and Jest before a Next.js build. Catalog, payment, and storage are selected through validated public settings, rather than a build command that forces demo mode. With no explicit provider settings, the safe seeded/simulated defaults and existing legacy environment settings remain effective. The release browser gate still requires simulated checkout; enabling direct Stripe requires its own verified rollout. Preview and production deployments of this public portfolio project are intended to be publicly accessible. No merchant credentials, Vercel deployment token, or protection-bypass secret are supplied to the browser workflow.
 
 ## Project and configuration
 
@@ -61,11 +61,13 @@ Set these **production-only** storefront variables once the backend's migrations
 
 | Variable | Purpose |
 | --- | --- |
-| `NEXT_PUBLIC_DEMO_ORDER_STORAGE=remote` | Build the remote demo adapter into the storefront |
+| `NEXT_PUBLIC_CATALOG_PROVIDER=seeded` | Select the sample catalog independently of payment |
+| `NEXT_PUBLIC_PAYMENT_PROVIDER=simulated` | Select simulated checkout explicitly |
+| `NEXT_PUBLIC_ORDER_STORAGE=remote` | Use the remote order service |
 | `ORDERS_API_URL` | The backend's HTTPS `.vercel.app` production origin |
 | `ORDERS_API_SECRET` | Random server-only credential shared with the backend; never expose it to the browser |
 
-Set GitHub repository variable `DEMO_ORDER_STORAGE=remote` at the same time. This makes the deployed browser gate require remote storage and exercise real persistence. Preview environments omit the API credential and use local mode. Neither production database credentials nor the service credential belong in storefront GitHub browser checks.
+The previous `NEXT_PUBLIC_DEMO_ORDER_STORAGE=remote` remains a compatibility default until explicit provider settings are configured. Set GitHub repository variable `DEMO_ORDER_STORAGE=remote` at the same time. This makes the deployed browser gate require remote storage and exercise real persistence. Preview environments omit the API credential and use local mode. Neither production database credentials nor the service credential belong in storefront GitHub browser checks.
 
 Activate persistent checkout with a new commit after saving these production settings. Wait for that commit's `verify` and `Vercel - Ecommerce-Store: production browser checks` results, then confirm the public `/api/health` reports the new commit and `orderStorage: remote`. Keep preview storage explicitly `local`. Rebuilding an already-approved commit can reuse earlier GitHub statuses, so a fresh commit is the activation path.
 
@@ -74,6 +76,18 @@ The initial backend production release is commit `f3bb23b5dcbdf5dc2d3bd4ac7711ef
 Local CI checks out an immutable backend revision and uses a disposable PostgreSQL service. The backend owns versioned migrations, production migration automation, expired-record cleanup and its own release gate. Deploy a backward-compatible backend first, then the storefront. Changing its API contract requires updating the pinned integration revision and both test suites.
 
 To rotate the service credential, coordinate the backend and storefront server-only values and redeploy both. A mismatched secret fails closed with a recoverable unavailable response; it cannot produce a false order confirmation. Do not reuse the documented local test fixture in cloud environments.
+
+## Activate direct Stripe test checkout
+
+Keep this separate from enabling real payments. The backend rejects live secret keys, and the storefront labels the hosted flow as test-only. Simulation remains available by selecting `simulated` instead of `stripe`.
+
+1. Release the reviewed backend revision and its additive `002_stripe_payments.sql` migration first. Existing simulated orders and legacy recovery keys remain compatible. Update the storefront CI backend pin to that revision.
+2. In the backend production environment, set `STRIPE_PAYMENTS_ENABLED=true`, a sandbox `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, and `STOREFRONT_ORIGIN=https://joys-store.vercel.app`. Keep secrets server-only. Register the sandbox webhook at `https://joys-orders.vercel.app/v1/webhooks/stripe` for Checkout completion, async success/failure, and expiration. Keep `NODEJS_HELPERS=0` so signature validation receives unmodified bytes.
+3. Set storefront production catalog to `seeded`, payment provider to `stripe`, and order storage to `remote`. Set the GitHub repository variable `PAYMENT_PROVIDER=stripe` together with `DEMO_ORDER_STORAGE=remote`. Preview settings continue to use local simulation without backend credentials.
+4. Release a new storefront commit. Its required deployed gate verifies the exact revision, test-mode capability settings, pending receipt ownership, and server-confirmed cancellation without entering card information. It cannot create a paid transaction. Inspect the matching public health revision only after required checks pass.
+5. Verify a real sandbox-card flow separately. The local verification covered a declined card, a pending receipt with the cart preserved, resuming the same Session, a paid signed webhook, and a paid receipt that survives reload. Browser contract fixtures in CI do not replace this provider integration check.
+
+To keep Stripe disabled, leave `PAYMENT_PROVIDER` unset or `simulated` in GitHub and select `simulated` in the storefront. A production setting change needs a new reviewed release; avoid reusing successful statuses for an older SHA.
 
 ## Inspect a release
 

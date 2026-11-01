@@ -54,6 +54,8 @@ flowchart LR
     Adapter -->|Remote demo orders| BFF[Same-origin Next.js order routes]
     BFF -->|Server-only credential| Orders[Node.js order service]
     Orders --> DB[(PostgreSQL)]
+    Orders -->|Test payment sessions / reconciliation| StripeAPI[Stripe Checkout API]
+    StripeAPI -->|Signed payment events| Orders
     Adapter -->|Explicit live mode| Commerce[Commerce.js API]
     UI -->|Live payment method creation| Stripe[Stripe.js / Elements]
     Stripe -->|Payment method identifier| UI
@@ -61,15 +63,15 @@ flowchart LR
 
 `src/app` owns routing, metadata, the shared layout, and UI providers. `src/context/CommerceContext.jsx` preserves catalog and cart state across route navigation. Components under `src/components/CheckoutForm` collect the address, request totals, submit payment, and display the returned order.
 
-`src/lib/commerce.js` selects a provider lazily in the browser. Demo is the default; only `NEXT_PUBLIC_COMMERCE_MODE=live` selects Commerce.js. Merchant keys alone never enable live payments, and a live error never falls back to a simulated success. Importing or building a route does not initialize either provider. Product detail routes read independently through `src/lib/product-reader.js`; their content and metadata render on the server, with a small client purchase control. Demo pages are pre-rendered from local fixtures. Live detail reads use bounded, uncached requests to the merchant API and distinguish missing products from temporary failures. The catalog list, cart state, and checkout remain client-side. `/api/health` exposes public release identity and configured order-storage mode, not database readiness.
+`src/lib/storefront-config.js` validates catalog, payment, and order-storage capabilities separately. `src/lib/commerce.js` loads the selected adapter lazily in the browser. The default is a seeded catalog, simulated payment, and local orders; explicit provider settings select the supported combination. The old `NEXT_PUBLIC_COMMERCE_MODE` and `NEXT_PUBLIC_DEMO_ORDER_STORAGE` settings remain compatibility defaults. Merchant keys alone never enable live payments, and a live error never falls back to a simulated success. Importing or building a route does not initialize either provider. Product detail routes read independently through `src/lib/product-reader.js`; their content and metadata render on the server, with a small client purchase control. Demo pages are pre-rendered from local fixtures. Live detail reads use bounded, uncached requests to the merchant API and distinguish missing products from temporary failures. The catalog list, cart state, and checkout remain client-side. `/api/health` exposes public release identity and configured order-storage mode, not database readiness.
 
-Remote demo checkout is enabled by `NEXT_PUBLIC_DEMO_ORDER_STORAGE=remote`. Same-origin Next.js routes own an HttpOnly guest cookie and call [Ecommerce-Orders](https://github.com/joydas65/Ecommerce-Orders) using a server-only credential. PostgreSQL transactions persist a price snapshot, one order per quote, and the idempotency result together. The browser stores a recovery key before submitting and only clears the matching cart after validating a confirmed receipt. Remote failures never fall back to a local success. See [the persistent-order decision](docs/decisions/0006-persistent-demo-orders.md).
+Remote simulated checkout is enabled by `NEXT_PUBLIC_ORDER_STORAGE=remote`. Canonical routes are `/api/checkout/quotes`, `/api/orders`, and `/api/orders/[id]`; the former `/api/demo/*` paths remain aliases for existing clients. Same-origin Next.js routes own an HttpOnly guest cookie and call [Ecommerce-Orders](https://github.com/joydas65/Ecommerce-Orders) using a server-only credential. PostgreSQL transactions persist a price snapshot, one order per quote, and the idempotency result together. The browser stores a recovery key before submitting and only clears the matching cart after validating a confirmed receipt. Remote failures never fall back to a local success. See [the persistent-order decision](docs/decisions/0006-persistent-demo-orders.md).
 
 The demo uses integer cents, $5 standard or $12 express shipping, and a clearly labeled **8% sample tax** on products plus shipping. These are demonstration rules, not real tax or delivery quotes. Cart storage contains product IDs, quantities, and cart identity/version only. Remote recovery adds a quote ID, idempotency key, and cart identity/version. Names, email, street address and payment details are never sent to the demo order service. If browser storage is unavailable, browsing and the cart work in memory, but remote order submission stops before sending an order because safe recovery cannot be guaranteed.
 
 The SDK’s Axios dependency is pinned to the patched 0.34.0 release through a scoped override. Contract tests cover the request and response shapes used by this app.
 
-In live mode, the browser passes a Stripe payment-method identifier to Commerce.js for order capture. Decision records explain the [framework foundation](docs/decisions/0001-next-foundation.md), [demo provider boundary](docs/decisions/0002-seeded-demo.md), [catalog-to-cart experience](docs/decisions/0003-catalog-to-cart-experience.md), [product page boundaries](docs/decisions/0004-product-detail-pages.md), and [URL-driven catalog discovery](docs/decisions/0005-catalog-discovery.md), including screenshots.
+In the legacy integration, the browser passes a Stripe payment-method identifier to Commerce.js for order capture. The separate hosted Stripe adapter uses Ecommerce-Orders directly with the seeded catalog and remote storage. It is test-only: Session creation returns a pending order, and only verified server-side Stripe results produce a paid receipt. See [the provider separation decision](docs/decisions/0007-storefront-capabilities.md) for the supported combinations and rollout boundary. Decision records explain the [framework foundation](docs/decisions/0001-next-foundation.md), [demo provider boundary](docs/decisions/0002-seeded-demo.md), [catalog-to-cart experience](docs/decisions/0003-catalog-to-cart-experience.md), [product page boundaries](docs/decisions/0004-product-detail-pages.md), and [URL-driven catalog discovery](docs/decisions/0005-catalog-discovery.md), including screenshots.
 
 ## Run locally
 
@@ -99,8 +101,9 @@ Try [desk products sorted by price](https://joys-store.vercel.app/?q=desk&sort=p
 Start [Ecommerce-Orders](https://github.com/joydas65/Ecommerce-Orders) with its local PostgreSQL setup, then add these values to the storefront's ignored `.env.local`:
 
 ```dotenv
-NEXT_PUBLIC_COMMERCE_MODE=demo
-NEXT_PUBLIC_DEMO_ORDER_STORAGE=remote
+NEXT_PUBLIC_CATALOG_PROVIDER=seeded
+NEXT_PUBLIC_PAYMENT_PROVIDER=simulated
+NEXT_PUBLIC_ORDER_STORAGE=remote
 ORDERS_API_URL=http://127.0.0.1:4100
 ORDERS_ALLOW_LOCAL_API=true
 ORDERS_API_SECRET=local-orders-test-secret-at-least-32-characters
@@ -112,17 +115,37 @@ Complete a purchase and choose **View saved receipt**. Reloading retains the ord
 
 Remote checkout requires browser storage and the Web Locks API, available in current major browsers on HTTPS (or localhost for development). This coordinates submissions across tabs; unavailable coordination stops submission rather than risking an unrecoverable order.
 
-### Optional live mode
+### Optional direct Stripe test checkout
+
+Configure the order service with a Stripe sandbox, its webhook signing secret, `STRIPE_PAYMENTS_ENABLED=true`, and a fixed `STOREFRONT_ORIGIN`. Follow the [backend setup](https://github.com/joydas65/Ecommerce-Orders). For local development, the backend also needs `ORDERS_ALLOW_LOCAL_STOREFRONT=true`; loopback return URLs are rejected on Vercel.
+
+Use the same remote-order settings above, with:
+
+```dotenv
+NEXT_PUBLIC_CATALOG_PROVIDER=seeded
+NEXT_PUBLIC_PAYMENT_PROVIDER=stripe
+NEXT_PUBLIC_ORDER_STORAGE=remote
+```
+
+Checkout redirects to Stripe's hosted test page. Use only [Stripe test payment details](https://docs.stripe.com/testing). The return page shows pending, paid, canceled, or review-required status from the backend. **Returning from Stripe is not proof of payment.** A paid receipt follows a signed webhook or explicit server reconciliation that verifies the stored order, totals, currency, and test mode. The address form still uses sample details; nothing is shipped.
+
+A lost response or reload reuses the saved quote and submission key. **Cancel checkout** expires the Stripe Session and checks its actual state; the browser Back button alone does not cancel a payment. Only a verified paid receipt clears the matching cart snapshot, preserving products added in another tab. Switching the payment setting back to `simulated` keeps the demo provider available without Stripe.
+
+The public portfolio remains on its configured provider until a verified release activates a different one. No Stripe secret or webhook signing key belongs in this storefront or in its browser checks.
+
+### Optional legacy Commerce.js / Stripe integration
 
 Create an ignored `.env.local` (see `.env.example`) with your own public configuration:
 
 ```dotenv
-NEXT_PUBLIC_COMMERCE_MODE=live
+NEXT_PUBLIC_CATALOG_PROVIDER=commercejs
+NEXT_PUBLIC_PAYMENT_PROVIDER=stripe
+NEXT_PUBLIC_ORDER_STORAGE=commercejs
 NEXT_PUBLIC_COMMERCE_PUBLIC_KEY=your_commerce_public_key
 NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY=your_stripe_publishable_key
 ```
 
-Configure products, shipping options, and the Stripe gateway in the connected Commerce.js store, then restart development. Explicit live mode with missing merchant keys shows a recoverable unavailable state. Set the mode back to `demo` to return to simulation. Demo and live carts use separate storage.
+Configure products, shipping options, and the Stripe gateway in the connected Commerce.js store, then restart development. Explicit live mode with missing merchant keys shows a recoverable unavailable state. Set catalog to `seeded`, payment to `simulated`, and order storage to `local` or `remote` to return to simulation. Demo and live carts use separate storage.
 
 Next.js exposes `NEXT_PUBLIC_*` values to the browser and includes them in the build. Use only public or publishable keys, and rebuild after changing them for production. The old `REACT_APP_*` names are no longer used. Do not commit `.env.local` or place secret keys in browser configuration.
 

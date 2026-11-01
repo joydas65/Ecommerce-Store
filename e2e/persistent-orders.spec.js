@@ -30,7 +30,7 @@ test('saves a real demo order, reloads its private receipt, and denies another g
   await page.getByRole('button', { name: /^Place demo order.*\$18\.36$/ }).click();
   const path = await openReceipt(page);
   const reference = await page.getByText(/^Order ref: DEMO-/).textContent();
-  const apiPath = `/api/demo${path}`;
+  const apiPath = `/api${path}`;
 
   await expect(page.getByRole('list', { name: 'Order items' })).toContainText('Notebook');
   await expect(page.getByRole('list', { name: 'Order totals' })).toContainText('$18.36');
@@ -49,7 +49,7 @@ test('saves a real demo order, reloads its private receipt, and denies another g
   const anotherGuest = await browser.newContext({ baseURL });
   try {
     const denied = await anotherGuest.request.get(apiPath);
-    const missing = await anotherGuest.request.get('/api/demo/orders/order_00000000-0000-4000-8000-000000000000');
+    const missing = await anotherGuest.request.get('/api/orders/order_00000000-0000-4000-8000-000000000000');
     expect(denied.status()).toBe(404);
     expect(missing.status()).toBe(404);
     expect(await denied.json()).toEqual(await missing.json());
@@ -70,7 +70,7 @@ test('recovers the same committed order after its response is lost and the check
   let committedOrder;
   let firstAttempt;
   const retryAttempts = [];
-  await page.route('**/api/demo/orders', async (route) => {
+  await page.route('**/api/orders', async (route) => {
     if (route.request().method() !== 'POST') return route.continue();
     const attempt = { body: route.request().postDataJSON(), key: route.request().headers()['idempotency-key'] };
     if (committedOrder) {
@@ -99,7 +99,7 @@ test('recovers the same committed order after its response is lost and the check
   expect(retryAttempts.length).toBeGreaterThanOrEqual(1);
   for (const attempt of retryAttempts) expect(attempt).toEqual(firstAttempt);
   await expect(page.getByText(`Order ref: ${committedOrder.reference}`, { exact: true })).toBeVisible();
-  const receiptResponse = await page.request.get(`/api/demo/orders/${committedOrder.id}`);
+  const receiptResponse = await page.request.get(`/api/orders/${committedOrder.id}`);
   expect(await receiptResponse.json()).toEqual(committedOrder);
   await page.goto('/cart');
   await expect(page.getByText(/You have no items in your shopping cart/)).toBeVisible();

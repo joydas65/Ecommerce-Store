@@ -29,7 +29,7 @@ const shippingData = {
   address1: '1 Main Street', city: 'Boston', zip: '02108',
   shippingCountry: 'US', shippingSubdivision: 'MA', shippingOption: 'ship_standard',
 };
-const order = { id: 'order_123', customer_reference: 'ORDER-123', customer: { firstname: 'Joy' } };
+const order = { id: 'order_123', status_payment: 'paid', customer_reference: 'ORDER-123', customer: { firstname: 'Joy' } };
 
 const deferred = () => {
   let resolve;

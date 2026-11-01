@@ -2,7 +2,7 @@ import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { loadStripe } from '@stripe/stripe-js/pure';
 import PaymentForm from './PaymentForm';
 
-jest.mock('../../lib/commerce-mode', () => ({ isDemoMode: true }));
+jest.mock('../../lib/storefront-config', () => ({ usesSimulatedPayment: true, usesSeededCatalog: true }));
 jest.mock('@stripe/stripe-js/pure', () => ({ loadStripe: jest.fn() }));
 jest.mock('@stripe/react-stripe-js', () => ({
   Elements: () => { throw new Error('Stripe must never mount in demo mode.'); },

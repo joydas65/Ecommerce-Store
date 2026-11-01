@@ -18,7 +18,8 @@
     "test:e2e:demo": "E2E_MODE=demo playwright test",
     "test:e2e:live": "E2E_MODE=live playwright test",
     "test:e2e:persistent": "E2E_MODE=demo E2E_ORDER_STORAGE=remote playwright test",
-    "test:e2e:deployed": "E2E_DEPLOYED=1 E2E_MODE=demo playwright test",
+    "test:e2e:stripe-contract": "E2E_MODE=stripe playwright test",
+    "test:e2e:deployed": "E2E_DEPLOYED=1 playwright test",
     "check": "npm run lint && npm run test:ci && npm run build"
   },
   "dependencies": {

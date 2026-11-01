@@ -58,8 +58,8 @@ function lockManagerFixture() {
 
 function harness({ storage = storageFixture(), lockManager = lockManagerFixture(), quote = quoteFixture(), submit = () => jsonResponse(receiptFixture(quote)) } = {}) {
   const fetchImpl = jest.fn(async (path, options) => {
-    if (path === '/api/demo/quotes') return jsonResponse(quote);
-    if (path === '/api/demo/orders') return submit(options);
+    if (path === '/api/checkout/quotes') return jsonResponse(quote);
+    if (path === '/api/orders') return submit(options);
     throw new Error(`Unexpected request: ${path}`);
   });
   const client = createPersistentDemoCommerce({ storage, fetchImpl, delayMs: 0, lockManager });
@@ -137,7 +137,7 @@ test('replays the same key and returns one committed order after a lost response
   const savedAttempt = storage.getItem(PENDING_ORDER_KEY);
   const restarted = createPersistentDemoCommerce({ storage, fetchImpl, delayMs: 0, lockManager });
   const receipt = await restarted.checkout.recover();
-  const submits = fetchImpl.mock.calls.filter(([path]) => path === '/api/demo/orders');
+  const submits = fetchImpl.mock.calls.filter(([path]) => path === '/api/orders');
 
   expect(submits).toHaveLength(2);
   expect(submits[1][1].headers['Idempotency-Key']).toBe(submits[0][1].headers['Idempotency-Key']);
@@ -162,7 +162,7 @@ test.each(['throws', 'silently discards'])('does not submit an order when recove
   });
 
   await expect(client.checkout.capture(token.id, orderInput)).rejects.toThrow(/No order was submitted/);
-  expect(fetchImpl.mock.calls.map(([path]) => path)).toEqual(['/api/demo/quotes']);
+  expect(fetchImpl.mock.calls.map(([path]) => path)).toEqual(['/api/checkout/quotes']);
   expect(await client.cart.retrieve()).toEqual(before);
 });
 
@@ -203,7 +203,7 @@ test('simulates failure before order submission and permits a successful retry',
   const { token } = await prepare(client);
   const input = { ...orderInput, payment: { gateway: 'demo', demo: { failOnce: true } } };
   await expect(client.checkout.capture(token.id, input)).rejects.toThrow(/Simulated payment failure/);
-  expect(fetchImpl.mock.calls.map(([path]) => path)).toEqual(['/api/demo/quotes']);
+  expect(fetchImpl.mock.calls.map(([path]) => path)).toEqual(['/api/checkout/quotes']);
   expect(storage.getItem(PENDING_ORDER_KEY)).toBeNull();
   expect((await client.cart.retrieve()).total_items).toBe(1);
 
@@ -232,7 +232,7 @@ test.each(['corrupt', 'unavailable'])('fails closed when an earlier anonymous at
   expect(await client.checkout.pending()).toMatchObject({ unreadable: true, message: expect.any(String) });
   await expect(client.checkout.capture(token.id, orderInput)).rejects.toThrow();
   await expect(client.checkout.recover()).rejects.toThrow();
-  expect(fetchImpl.mock.calls.map(([path]) => path)).toEqual(['/api/demo/quotes']);
+  expect(fetchImpl.mock.calls.map(([path]) => path)).toEqual(['/api/checkout/quotes']);
   expect((await client.cart.retrieve()).total_items).toBe(1);
 });
 
@@ -249,7 +249,7 @@ test('retains an ambiguous attempt when a changed guest identity makes its quote
   await expect(client.checkout.recover()).rejects.toThrow(/quote is unavailable/);
   expect(storage.getItem(PENDING_ORDER_KEY)).toBe(pending);
   expect(await client.cart.retrieve()).toEqual(before);
-  const submissions = fetchImpl.mock.calls.filter(([path]) => path === '/api/demo/orders');
+  const submissions = fetchImpl.mock.calls.filter(([path]) => path === '/api/orders');
   expect(submissions[1][1].headers['Idempotency-Key']).toBe(submissions[0][1].headers['Idempotency-Key']);
 });
 
@@ -302,7 +302,7 @@ test('serializes recovery across adapter instances and rereads the pending key a
   firstResponse.reject(new Error('Response lost after commit'));
   await rejected;
   await expect(recovery).resolves.toMatchObject({ id: orderId });
-  const calls = fetchImpl.mock.calls.filter(([path]) => path === '/api/demo/orders');
+  const calls = fetchImpl.mock.calls.filter(([path]) => path === '/api/orders');
   expect(calls).toHaveLength(2);
   expect(calls[0][1].headers['Idempotency-Key']).toBe(pending.key);
   expect(calls[1][1].headers['Idempotency-Key']).toBe(pending.key);
@@ -327,11 +327,11 @@ test('a queued second purchase rechecks its cart after the first tab completes',
   const otherCapture = second.client.checkout.capture(otherToken.id, orderInput);
   const rejected = expect(otherCapture).rejects.toThrow(/Your cart changed/);
   await Promise.resolve();
-  expect(second.fetchImpl.mock.calls.filter(([path]) => path === '/api/demo/orders')).toHaveLength(0);
+  expect(second.fetchImpl.mock.calls.filter(([path]) => path === '/api/orders')).toHaveLength(0);
   response.resolve(jsonResponse(receiptFixture()));
   await capture;
   await rejected;
-  expect(second.fetchImpl.mock.calls.filter(([path]) => path === '/api/demo/orders')).toHaveLength(0);
+  expect(second.fetchImpl.mock.calls.filter(([path]) => path === '/api/orders')).toHaveLength(0);
   expect(storage.getItem(PENDING_ORDER_KEY)).toBeNull();
 });
 
@@ -347,5 +347,5 @@ test.each(['unsupported', 'denied'])('fails before submitting or changing recove
   await expect(client.checkout.recover()).rejects.toThrow(/coordinate checkout/);
   expect(storage.getItem(PENDING_ORDER_KEY)).toBe(pending);
   expect(await client.cart.retrieve()).toEqual(before);
-  expect(fetchImpl.mock.calls.map(([path]) => path)).toEqual(['/api/demo/quotes']);
+  expect(fetchImpl.mock.calls.map(([path]) => path)).toEqual(['/api/checkout/quotes']);
 });

@@ -1,4 +1,3 @@
-// Public, build-time configuration. Merchant credentials never select live mode.
-// A fresh checkout (or an unrecognized value) always starts the safe demo.
-export const isDemoMode = process.env.NEXT_PUBLIC_COMMERCE_MODE !== 'live';
-export const isPersistentDemo = isDemoMode && process.env.NEXT_PUBLIC_DEMO_ORDER_STORAGE === 'remote';
+// Compatibility names for older consumers. New code selects the capability it
+// actually needs from storefront-config rather than treating demo as one mode.
+export { usesSimulatedPayment as isDemoMode, usesPersistentOrders as isPersistentDemo } from './storefront-config';

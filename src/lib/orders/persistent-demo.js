@@ -1,6 +1,6 @@
 import { createDemoCommerce } from '../demo/commerce';
 import { money } from '../demo/catalog';
-import { isOrderReceipt, isQuote } from './order-contract';
+import { isSimulatedOrderReceipt, isQuote } from './order-contract';
 
 export const PENDING_ORDER_KEY = 'joys-store-pending-order-v1';
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -87,14 +87,14 @@ export function createPersistentDemoCommerce({ storage, fetchImpl = globalThis.f
   };
   const commit = async (pending) => {
     let receipt;
-    try { receipt = await request('/api/demo/orders', { quoteId: pending.quoteId }, { 'Idempotency-Key': pending.key }); }
+    try { receipt = await request('/api/orders', { quoteId: pending.quoteId }, { 'Idempotency-Key': pending.key }); }
     catch (error) {
       // A missing quote can belong to another guest after a cookie change.
       // Only an owned, unconsumed expired quote proves submission did not occur.
       if (error.code === 'QUOTE_EXPIRED') clearPending(pending);
       throw error;
     }
-    if (!isOrderReceipt(receipt) || receipt.quoteId !== pending.quoteId) {
+    if (!isSimulatedOrderReceipt(receipt) || receipt.quoteId !== pending.quoteId) {
       throw new Error('The order service did not return a valid receipt. Retry to recover the same order.');
     }
     // A committed order remains successful even if local cart cleanup fails.
@@ -129,11 +129,11 @@ export function createPersistentDemoCommerce({ storage, fetchImpl = globalThis.f
       setTaxZone: async (id, location) => {
         await local.checkout.setTaxZone(id, location);
         const token = tokenFor(id);
-        const quote = await request('/api/demo/quotes', {
+        const quote = await request('/api/checkout/quotes', {
           items: token.cart.items, shippingMethod: token.shippingMethod,
           destination: { country: location.country, region: location.region || '' },
         });
-        if (!isQuote(quote)) throw new Error('The order service could not confirm the quote. Please try again.');
+        if (!isQuote(quote) || (quote.paymentProvider !== undefined && quote.paymentProvider !== 'simulated')) throw new Error('The order service could not confirm the quote. Please try again.');
         token.quote = quote;
         return { valid: true, live: toCheckoutLive(quote) };
       },

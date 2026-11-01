@@ -1,6 +1,6 @@
 import 'server-only';
 import { cache } from 'react';
-import { isDemoMode } from './commerce-mode';
+import { catalogProvider as configuredCatalogProvider } from './storefront-config';
 import { catalog, productDetails } from './demo/catalog';
 import { plainProductText } from './product-text';
 
@@ -35,13 +35,13 @@ const normalizeProduct = (product, slug) => {
 };
 
 export async function loadProduct(slug, {
-  demoMode = isDemoMode,
+  catalogProvider = configuredCatalogProvider,
   publicKey = process.env.NEXT_PUBLIC_COMMERCE_PUBLIC_KEY,
   fetchImpl = globalThis.fetch,
 } = {}) {
   if (!validIdentifier(slug)) return { status: 'not-found' };
 
-  if (demoMode) {
+  if (catalogProvider === 'seeded') {
     const product = catalog.find((item) => item.permalink === slug || item.id === slug);
     return product ? { status: 'ready', product: productDetails(product) } : { status: 'not-found' };
   }

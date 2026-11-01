@@ -2,7 +2,7 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import AddressForm from './AddressForm';
 import { commerce } from '../../lib/commerce';
 
-jest.mock('../../lib/commerce-mode', () => ({ isDemoMode: true }));
+jest.mock('../../lib/storefront-config', () => ({ usesSeededCatalog: true }));
 jest.mock('../../lib/commerce', () => ({ commerce: {
   services: { localeListShippingCountries: jest.fn(), localeListSubdivisions: jest.fn() },
   checkout: { getShippingOptions: jest.fn() },

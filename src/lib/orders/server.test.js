@@ -4,7 +4,7 @@ jest.mock('server-only', () => ({}), { virtual: true });
 import { forwardOrderRequest, orderApiConfig } from './server';
 
 let mockPersistentMode = true;
-jest.mock('../commerce-mode', () => ({ get isPersistentDemo() { return mockPersistentMode; } }));
+jest.mock('../storefront-config', () => ({ get usesPersistentOrders() { return mockPersistentMode; } }));
 
 const originalEnv = process.env;
 const guest = '6af35893-fbd9-489a-b149-1df47299cda9';
@@ -16,7 +16,7 @@ const quoteBody = { items: [{ productId: 'demo-desk-mat', quantity: 1 }], shippi
 const localConfig = { ORDERS_API_URL: 'http://127.0.0.1:4100', ORDERS_ALLOW_LOCAL_API: 'true', ORDERS_API_SECRET: secret };
 const reply = (body, status = 200) => new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } });
 
-function request({ method = 'POST', url = 'https://store.example/api/orders/quotes', body = quoteBody, headers = {} } = {}) {
+function request({ method = 'POST', url = 'https://store.example/api/checkout/quotes', body = quoteBody, headers = {} } = {}) {
   return new Request(url, { method, headers: { origin: new URL(url).origin, 'content-type': 'application/json', ...headers }, ...(method === 'POST' ? { body: typeof body === 'string' ? body : JSON.stringify(body) } : {}) });
 }
 
@@ -47,7 +47,7 @@ test.each(['https://attacker.example', 'null', '', 'not an origin', 'https://sto
 test('accepts the actual same-origin Host when Next reconstructs the request URL with localhost', async () => {
   const fetchImpl = jest.fn().mockResolvedValue(reply({ id: 'quote_fixture' }, 201));
   const response = await forwardOrderRequest(request({
-    url: 'http://localhost:3100/api/demo/quotes',
+    url: 'http://localhost:3100/api/checkout/quotes',
     headers: { host: '127.0.0.1:3100', origin: 'http://127.0.0.1:3100' },
   }), '/v1/checkout-quotes', { createGuest: true, fetchImpl });
   expect(response.status).toBe(201);
@@ -62,7 +62,7 @@ test.each([
   { host: '127.0.0.1:3100/path', origin: 'http://127.0.0.1:3100' },
 ])('rejects cross-site or malformed Host/origin pairs: %j', async (headers) => {
   const fetchImpl = jest.fn();
-  const response = await forwardOrderRequest(request({ url: 'http://localhost:3100/api/demo/quotes', headers }), '/v1/checkout-quotes', { createGuest: true, fetchImpl });
+  const response = await forwardOrderRequest(request({ url: 'http://localhost:3100/api/checkout/quotes', headers }), '/v1/checkout-quotes', { createGuest: true, fetchImpl });
   expect(response.status).toBe(403);
   expect(fetchImpl).not.toHaveBeenCalled();
 });

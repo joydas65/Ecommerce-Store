@@ -25,20 +25,56 @@ function isPricingSnapshot(value) {
 
 // Validate the server's pricing/confirmation contract before displaying success
 // or clearing a cart. These checks supplement, rather than replace, server rules.
-export function isOrderReceipt(order, expectedId) {
+function isOrderSnapshot(order, expectedId) {
   return !!(isPricingSnapshot(order)
     && typeof order.id === 'string' && orderIdPattern.test(order.id)
     && (expectedId === undefined || order.id === expectedId)
-    && typeof order.reference === 'string' && /^DEMO-[\da-z-]+$/i.test(order.reference)
     && typeof order.quoteId === 'string' && quoteIdPattern.test(order.quoteId)
-    && order.status === 'CONFIRMED' && order.paymentStatus === 'SIMULATED'
     && isDate(order.createdAt) && isDate(order.expiresAt)
     && Date.parse(order.expiresAt) > Date.parse(order.createdAt));
+}
+
+export function isSimulatedOrderReceipt(order, expectedId) {
+  return isOrderSnapshot(order, expectedId)
+    && typeof order.reference === 'string' && /^DEMO-[\da-z-]+$/i.test(order.reference)
+    && (order.paymentProvider === undefined || order.paymentProvider === 'simulated')
+    && order.paymentMode === undefined
+    && order.status === 'CONFIRMED' && order.paymentStatus === 'SIMULATED';
+}
+
+export function isStripeOrder(order, expectedId) {
+  const states = { PENDING_PAYMENT: 'PENDING', CONFIRMED: 'PAID', CANCELED: 'CANCELED', PAYMENT_REVIEW: 'REQUIRES_REVIEW' };
+  return isOrderSnapshot(order, expectedId)
+    && typeof order.reference === 'string' && /^TEST-[\da-z-]+$/i.test(order.reference)
+    && order.paymentProvider === 'stripe-test' && order.paymentMode === 'test'
+    && Object.hasOwn(states, order.status) && states[order.status] === order.paymentStatus;
+}
+
+export function isPaidStripeOrder(order, expectedId) {
+  return isStripeOrder(order, expectedId) && order.status === 'CONFIRMED' && order.paymentStatus === 'PAID';
+}
+
+export function isOrderReceipt(order, expectedId) {
+  return isSimulatedOrderReceipt(order, expectedId) || isPaidStripeOrder(order, expectedId);
+}
+
+export function isStripeCheckoutUrl(value) {
+  if (typeof value !== 'string') return false;
+  try {
+    const url = new URL(value);
+    return url.protocol === 'https:' && url.hostname === 'checkout.stripe.com' && !url.port && !url.username && !url.password;
+  } catch { return false; }
+}
+
+export function isStripeSessionResult(result, expectedId) {
+  return !!(result && isStripeOrder(result.order, expectedId)
+    && (result.checkoutUrl === null || (result.order.status === 'PENDING_PAYMENT' && isStripeCheckoutUrl(result.checkoutUrl))));
 }
 
 export function isQuote(quote, expectedId) {
   return !!(isPricingSnapshot(quote)
     && typeof quote.id === 'string' && quoteIdPattern.test(quote.id)
     && (expectedId === undefined || quote.id === expectedId)
+    && (quote.paymentProvider === undefined || ['simulated', 'stripe-test'].includes(quote.paymentProvider))
     && isDate(quote.expiresAt));
 }

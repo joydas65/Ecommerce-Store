@@ -4,6 +4,7 @@ import '@testing-library/jest-dom';
 
 import Checkout from './Checkout';
 import { commerce } from '../../../lib/commerce';
+import { loadStripe } from '@stripe/stripe-js/pure';
 
 const mockStripe = { createPaymentMethod: jest.fn() };
 const mockElements = { getElement: jest.fn() };
@@ -57,7 +58,7 @@ const calculatedLive = {
   total_with_tax: money(27),
 };
 const token = { id: 'checkout_123', live: initialLive };
-const order = { id: 'order_123', customer_reference: 'ORDER-123', customer: { firstname: 'Joy' } };
+const order = { id: 'order_123', status_payment: 'paid', customer_reference: 'ORDER-123', customer: { firstname: 'Joy' } };
 
 const deferred = () => {
   let resolve;
@@ -82,6 +83,7 @@ const continueToPayment = async () => {
 
 beforeEach(() => {
   jest.resetAllMocks();
+  loadStripe.mockResolvedValue({});
   commerce.checkout.generateToken.mockResolvedValue(token);
   commerce.checkout.checkShippingOption.mockResolvedValue({ valid: true });
   commerce.checkout.setTaxZone.mockResolvedValue({ valid: true, live: calculatedLive });

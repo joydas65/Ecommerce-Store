@@ -1,12 +1,12 @@
 import { notFound } from 'next/navigation';
 import { getProduct } from '../../../lib/product-reader';
-import { isDemoMode } from '../../../lib/commerce-mode';
+import { usesSeededCatalog } from '../../../lib/storefront-config';
 import { catalog } from '../../../lib/demo/catalog';
 import ProductDetail from '../../../components/ProductDetail/ProductDetail';
 import ProductUnavailable from '../../../components/ProductDetail/ProductUnavailable';
 
 export function generateStaticParams() {
-  return isDemoMode ? catalog.map(({ permalink }) => ({ slug: permalink })) : [];
+  return usesSeededCatalog ? catalog.map(({ permalink }) => ({ slug: permalink })) : [];
 }
 
 export async function generateMetadata({ params }) {

@@ -7,7 +7,7 @@ import Link from 'next/link';
 
 import { commerce } from '../../lib/commerce';
 import FormInput from './CustomTextField';
-import { isDemoMode } from '../../lib/commerce-mode';
+import { usesSeededCatalog } from '../../lib/storefront-config';
 
 const AddressForm = ({ checkoutToken, shippingData = {}, onSubmit, isSubmitting = false, error = '' }) => {
   const [savedAddress, setSavedAddress] = useState(shippingData);
@@ -117,7 +117,7 @@ const AddressForm = ({ checkoutToken, shippingData = {}, onSubmit, isSubmitting 
   return (
     <>
       <Typography variant="h6" gutterBottom>Shipping address</Typography>
-      {isDemoMode && (
+      {usesSeededCatalog && (
         <>
           <Typography variant="body2" color="text.secondary">Use fictitious details for this demo. Your address is used only for this checkout and is not saved.</Typography>
           <Button type="button" disabled={submitting || countriesLoading} sx={{ my: 1 }} onClick={() => {

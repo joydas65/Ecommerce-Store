@@ -1,4 +1,4 @@
-import { isDemoMode, isPersistentDemo } from '../../../lib/commerce-mode';
+import { catalogProvider, paymentProvider, orderStorage, usesSimulatedPayment, usesPersistentOrders } from '../../../lib/storefront-config';
 
 export const dynamic = 'force-dynamic';
 
@@ -6,8 +6,10 @@ export const dynamic = 'force-dynamic';
 export function GET() {
   return Response.json({
     status: 'ok',
-    mode: isDemoMode ? 'demo' : 'live',
-    orderStorage: isPersistentDemo ? 'remote' : 'local',
+    // Retain the release-gate fields for deployments using the previous harness.
+    mode: usesSimulatedPayment ? 'demo' : 'live',
+    orderStorage: usesPersistentOrders ? 'remote' : 'local',
+    providers: { catalog: catalogProvider, payment: paymentProvider, orders: orderStorage },
     commit: process.env.VERCEL_GIT_COMMIT_SHA || null,
   }, { headers: { 'Cache-Control': 'no-store' } });
 }

@@ -2,7 +2,7 @@
 
 import { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react';
 import { commerce } from '../lib/commerce';
-import { isDemoMode, isPersistentDemo } from '../lib/commerce-mode';
+import { usesSeededCatalog, usesSimulatedPayment, usesPersistentOrders, usesHostedStripe } from '../lib/storefront-config';
 import { DEMO_CART_STORAGE_KEY } from '../lib/demo/storage-key';
 
 const CommerceContext = createContext(null);
@@ -51,7 +51,7 @@ export function CommerceProvider({ children }) {
   }, [loadProducts, loadCart]);
 
   useEffect(() => {
-    if (!isDemoMode) return;
+    if (!usesSeededCatalog) return;
     const syncCart = (event) => {
       if (event.key === DEMO_CART_STORAGE_KEY || event.key === null) loadCart();
     };
@@ -87,24 +87,36 @@ export function CommerceProvider({ children }) {
     }
   };
 
-  const confirmOrder = (incomingOrder) => {
-    if (!incomingOrder?.id) {
+  const confirmOrder = useCallback((incomingOrder) => {
+    if (typeof incomingOrder?.id !== 'string' || !incomingOrder.id.trim()) {
       throw new Error('We could not confirm your order. Please contact the store before trying again.');
     }
-    if (isPersistentDemo ? (!incomingOrder.demo || !incomingOrder.persistent || incomingOrder.status_payment !== 'simulated')
-      : incomingOrder.status_payment && !['paid', 'authorized'].includes(incomingOrder.status_payment)) {
+    const paymentConfirmed = usesSimulatedPayment
+      ? incomingOrder.demo === true && (usesPersistentOrders
+        ? incomingOrder.persistent === true && incomingOrder.status_payment === 'simulated'
+        : incomingOrder.status_payment === 'paid')
+      : usesHostedStripe
+        ? incomingOrder.demo === false && incomingOrder.persistent === true && incomingOrder.payment_provider === 'stripe-test'
+          && incomingOrder.payment_mode === 'test' && incomingOrder.status_payment === 'paid'
+        : !incomingOrder.demo && ['paid', 'authorized'].includes(incomingOrder.status_payment);
+    if (!paymentConfirmed) {
       throw new Error('Your order payment has not been confirmed. Please contact the store before trying again.');
     }
 
     // Cart synchronization must not turn a confirmed purchase into a payment failure.
-    if (isPersistentDemo) {
+    if (usesPersistentOrders) {
       if (incomingOrder.cart) setCart(incomingOrder.cart);
     } else setCart({ line_items: [], total_items: 0 });
     commerce.cart.refresh().then(setCart).catch(() => {});
     return incomingOrder;
-  };
+  }, []);
   const handleCaptureCheckout = async (checkoutTokenId, newOrder) => confirmOrder(await commerce.checkout.capture(checkoutTokenId, newOrder));
   const handleRecoverCheckout = async () => confirmOrder(await commerce.checkout.recover());
+  // Creating or resuming a hosted session is not payment confirmation.
+  const handleStartPayment = (tokenId) => commerce.checkout.startPayment(tokenId);
+  const handleResumePayment = () => commerce.checkout.recover();
+  const handleCompletePayment = useCallback(async (order) => confirmOrder(await commerce.checkout.completePayment(order)), [confirmOrder]);
+  const handleCanceledPayment = useCallback((order) => commerce.checkout.releaseCanceledPayment(order), []);
 
   return (
     <CommerceContext.Provider value={{
@@ -115,7 +127,7 @@ export function CommerceProvider({ children }) {
       handleUpdateCartQty: (id, quantity) => changeCart(() => commerce.cart.update(id, { quantity })),
       handleRemoveFromCart: (id) => changeCart(() => commerce.cart.remove(id)),
       handleEmptyCart: () => changeCart(() => commerce.cart.empty()),
-      handleCaptureCheckout, handleRecoverCheckout,
+      handleCaptureCheckout, handleRecoverCheckout, handleStartPayment, handleResumePayment, handleCompletePayment, handleCanceledPayment,
     }}>
       {children}
     </CommerceContext.Provider>

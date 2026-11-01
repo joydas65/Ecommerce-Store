@@ -17,11 +17,11 @@ const reply = (data, status = 200) => ({
   ok: status >= 200 && status < 300,
   json: jest.fn().mockResolvedValue(data),
 });
-const options = (fetchImpl) => ({ demoMode: false, publicKey: 'pk_test_fixture', fetchImpl });
+const options = (fetchImpl) => ({ catalogProvider: 'commercejs', publicKey: 'pk_test_fixture', fetchImpl });
 
 test.each(catalog)('reads $permalink directly from demo fixtures without a browser or network', async (product) => {
   const fetchImpl = jest.fn();
-  const result = await loadProduct(product.permalink, { demoMode: true, fetchImpl });
+  const result = await loadProduct(product.permalink, { catalogProvider: 'seeded', fetchImpl });
 
   expect(typeof window).toBe('undefined');
   expect(result).toMatchObject({
@@ -35,18 +35,18 @@ test.each(catalog)('reads $permalink directly from demo fixtures without a brows
 });
 
 test('accepts a demo product id and isolates returned details from fixture mutation', async () => {
-  const first = await loadProduct('demo-desk-mat', { demoMode: true });
+  const first = await loadProduct('demo-desk-mat', { catalogProvider: 'seeded' });
   first.product.details.features.push('Changed');
   first.product.details.specifications[0].value = 'Changed';
 
-  const second = await loadProduct('desk-mat', { demoMode: true });
+  const second = await loadProduct('desk-mat', { catalogProvider: 'seeded' });
   expect(second.product.details).toEqual(catalog[0].details);
 });
 
 test.each(['missing-product', '', '../desk-mat', 'desk/mat', 'desk%2Fmat', 'a'.repeat(129), null, undefined])(
   'returns not-found for absent or invalid demo identifier %p', async (slug) => {
     const fetchImpl = jest.fn();
-    await expect(loadProduct(slug, { demoMode: true, fetchImpl })).resolves.toEqual({ status: 'not-found' });
+    await expect(loadProduct(slug, { catalogProvider: 'seeded', fetchImpl })).resolves.toEqual({ status: 'not-found' });
     expect(fetchImpl).not.toHaveBeenCalled();
   },
 );
@@ -85,7 +85,7 @@ test('retrieves product ids without the permalink query and supplies a route fal
 
 test.each(['', '   ', null])('explicit live mode with missing credentials stays unavailable (%p)', async (publicKey) => {
   const fetchImpl = jest.fn();
-  await expect(loadProduct('desk-mat', { demoMode: false, publicKey, fetchImpl }))
+  await expect(loadProduct('desk-mat', { catalogProvider: 'commercejs', publicKey, fetchImpl }))
     .resolves.toEqual({ status: 'unavailable' });
   expect(fetchImpl).not.toHaveBeenCalled();
 });

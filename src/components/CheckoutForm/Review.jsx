@@ -1,5 +1,5 @@
 import { Typography, List, ListItem, ListItemText } from '@mui/material';
-import { isDemoMode } from '../../lib/commerce-mode';
+import { usesSeededCatalog } from '../../lib/storefront-config';
 
 const Review = ({ checkoutToken, headingRef }) => (
   <>
@@ -21,7 +21,7 @@ const Review = ({ checkoutToken, headingRef }) => (
       </ListItem>
       {checkoutToken.live.tax?.amount && (
         <ListItem sx={{ py: 1.25, px: 0 }}>
-          <ListItemText primary={isDemoMode ? 'Sample tax (8%)' : checkoutToken.live.tax.included_in_price ? 'Tax (included)' : 'Tax'} />
+          <ListItemText primary={usesSeededCatalog ? 'Sample tax (8%)' : checkoutToken.live.tax.included_in_price ? 'Tax (included)' : 'Tax'} />
           <Typography variant="body2">{checkoutToken.live.tax.amount.formatted_with_symbol}</Typography>
         </ListItem>
       )}

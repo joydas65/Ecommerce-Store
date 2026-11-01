@@ -51,7 +51,7 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: joydas65/Ecommerce-Orders
-          ref: f3bb23b5dcbdf5dc2d3bd4ac7711efa3e5c2f2f4
+          ref: 20561b58cc07ab55e0fe153759fd0c2a8d418127
           path: .orders-service
           persist-credentials: false
       - name: Start real order persistence for browser checks
@@ -70,6 +70,8 @@ jobs:
           exit 1
       - name: Verify durable receipts and response-loss recovery
         run: npm run test:e2e:persistent
+      - name: Verify Stripe browser contract without payment credentials
+        run: npm run test:e2e:stripe-contract
       - name: Save browser reports
         if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7

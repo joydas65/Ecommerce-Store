@@ -2,7 +2,7 @@ import { act, fireEvent, render, screen } from '@testing-library/react';
 import Checkout from './Checkout';
 import { commerce } from '../../../lib/commerce';
 
-jest.mock('../../../lib/commerce-mode', () => ({ isDemoMode: true, isPersistentDemo: true }));
+jest.mock('../../../lib/storefront-config', () => ({ usesSimulatedPayment: true, usesPersistentOrders: true, usesSeededCatalog: true }));
 jest.mock('../../../lib/commerce', () => ({ commerce: { checkout: {
   pending: jest.fn(), generateToken: jest.fn(), checkShippingOption: jest.fn(), setTaxZone: jest.fn(),
 } } }));
