@@ -67,6 +67,10 @@ Set these **production-only** storefront variables once the backend's migrations
 
 Set GitHub repository variable `DEMO_ORDER_STORAGE=remote` at the same time. This makes the deployed browser gate require remote storage and exercise real persistence. Preview environments omit the API credential and use local mode. Neither production database credentials nor the service credential belong in storefront GitHub browser checks.
 
+Activate persistent checkout with a new commit after saving these production settings. Wait for that commit's `verify` and `Vercel - Ecommerce-Store: production browser checks` results, then confirm the public `/api/health` reports the new commit and `orderStorage: remote`. Keep preview storage explicitly `local`. Rebuilding an already-approved commit can reuse earlier GitHub statuses, so a fresh commit is the activation path.
+
+The initial backend production release is commit `f3bb23b5dcbdf5dc2d3bd4ac7711efa3e5c2f2f4` at `https://joys-orders.vercel.app`. Its verification and migration gates passed before promotion. The public API passed authentication, authoritative shipping totals, persistence, replay, receipt reload, guest isolation and price-tampering checks. A receipt created in staging also remained readable and replayable after the Git-based production deployment, verifying that its state lives in PostgreSQL rather than function memory.
+
 Local CI checks out an immutable backend revision and uses a disposable PostgreSQL service. The backend owns versioned migrations, production migration automation, expired-record cleanup and its own release gate. Deploy a backward-compatible backend first, then the storefront. Changing its API contract requires updating the pinned integration revision and both test suites.
 
 To rotate the service credential, coordinate the backend and storefront server-only values and redeploy both. A mismatched secret fails closed with a recoverable unavailable response; it cannot produce a false order confirmation. Do not reuse the documented local test fixture in cloud environments.
