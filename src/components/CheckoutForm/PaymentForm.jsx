@@ -6,11 +6,14 @@ import { Elements, CardElement, ElementsConsumer } from '@stripe/react-stripe-js
 import { loadStripe } from '@stripe/stripe-js/pure';
 
 import Review from './Review';
+import DemoPaymentForm from './DemoPaymentForm';
+import { createOrderData } from './orderData';
+import { isDemoMode } from '../../lib/commerce-mode';
 
 const publishableKey = process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY;
-const stripePromise = publishableKey ? loadStripe(publishableKey) : null;
+const stripePromise = !isDemoMode && publishableKey ? loadStripe(publishableKey) : null;
 
-const PaymentForm = ({ checkoutToken, backStep, shippingData, onCaptureCheckout, onComplete }) => {
+const StripePaymentForm = ({ checkoutToken, backStep, shippingData, onCaptureCheckout, onComplete, reviewHeadingRef }) => {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
   const submitting = useRef(false);
@@ -32,18 +35,12 @@ const PaymentForm = ({ checkoutToken, backStep, shippingData, onCaptureCheckout,
       if (error) throw error;
       if (!paymentMethod || !paymentMethod.id) throw new Error('Unable to prepare your payment. Please try again.');
 
-      const orderData = {
-        line_items: checkoutToken.live.line_items,
-        customer: { firstname: shippingData.firstName, lastname: shippingData.lastName, email: shippingData.email },
-        shipping: { name: `${shippingData.firstName} ${shippingData.lastName}`, street: shippingData.address1, town_city: shippingData.city, county_state: shippingData.shippingSubdivision, postal_zip_code: shippingData.zip, country: shippingData.shippingCountry },
-        fulfillment: { shipping_method: shippingData.shippingOption },
-        payment: {
-          gateway: 'stripe',
-          stripe: {
-            payment_method_id: paymentMethod.id,
-          },
+      const orderData = createOrderData(checkoutToken, shippingData, {
+        gateway: 'stripe',
+        stripe: {
+          payment_method_id: paymentMethod.id,
         },
-      };
+      });
 
       const order = await onCaptureCheckout(checkoutToken.id, orderData);
       onComplete(order);
@@ -57,7 +54,7 @@ const PaymentForm = ({ checkoutToken, backStep, shippingData, onCaptureCheckout,
 
   return (
     <>
-      <Review checkoutToken={checkoutToken} />
+      <Review checkoutToken={checkoutToken} headingRef={reviewHeadingRef} />
       <Divider />
       <Typography variant="h6" gutterBottom sx={{ my: 2.5 }}>Payment method</Typography>
       {!stripePromise && (
@@ -82,4 +79,7 @@ const PaymentForm = ({ checkoutToken, backStep, shippingData, onCaptureCheckout,
     </>
   );
 };
+
+const PaymentForm = (props) => isDemoMode ? <DemoPaymentForm {...props} /> : <StripePaymentForm {...props} />;
+
 export default PaymentForm;

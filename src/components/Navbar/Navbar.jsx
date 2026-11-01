@@ -13,7 +13,7 @@ const Navbar = ({ totalItems }) => {
   const pathname = usePathname();
 
   return (
-    <AppBar position="fixed" sx={styles.appBar} color="inherit">
+    <AppBar position="sticky" sx={styles.appBar} color="inherit">
       <Toolbar>
         <Typography component={Link} href="/" variant="h6" sx={styles.title} color="inherit">
           <Image src={logo} alt="" width={25} height={25} />

@@ -2,6 +2,8 @@
 
 import { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react';
 import { commerce } from '../lib/commerce';
+import { isDemoMode } from '../lib/commerce-mode';
+import { DEMO_CART_STORAGE_KEY } from '../lib/demo/storage-key';
 
 const CommerceContext = createContext(null);
 
@@ -47,6 +49,17 @@ export function CommerceProvider({ children }) {
     loadProducts();
     loadCart();
   }, [loadProducts, loadCart]);
+
+  useEffect(() => {
+    if (!isDemoMode) return;
+    const syncCart = (event) => {
+      if (event.key === DEMO_CART_STORAGE_KEY || event.key === null) loadCart();
+    };
+    // A completed demo purchase in another tab rotates the stored cart ID.
+    // Refresh shared UI state so restarting checkout does not reuse an old ID.
+    window.addEventListener('storage', syncCart);
+    return () => window.removeEventListener('storage', syncCart);
+  }, [loadCart]);
 
   const changeCart = async (operation) => {
     if (changingCart.current) return;

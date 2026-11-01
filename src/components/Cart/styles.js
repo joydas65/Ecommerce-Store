@@ -1,5 +1,4 @@
 const styles = {
-  toolbar: (theme) => theme.mixins.toolbar,
   title: {
     mt: '5%',
     fontSize: { xs: '2rem', sm: '3rem' },

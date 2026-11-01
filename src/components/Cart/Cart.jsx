@@ -8,7 +8,6 @@ import styles from './styles';
 
 const Cart = ({ cart, handleUpdateCartQty, handleRemoveFromCart, handleEmptyCart, isUpdating = false }) => (
   <Container component="main">
-    <Box sx={styles.toolbar} />
     <Typography sx={styles.title} variant="h3" gutterBottom>Your Shopping Cart</Typography>
     {!cart.line_items ? (
       <Typography role="status">Loading cart…</Typography>

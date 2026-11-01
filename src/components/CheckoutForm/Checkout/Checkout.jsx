@@ -8,8 +8,9 @@ import { commerce } from '../../../lib/commerce';
 import AddressForm from '../AddressForm';
 import PaymentForm from '../PaymentForm';
 import styles from './styles';
+import { isDemoMode } from '../../../lib/commerce-mode';
 
-const steps = ['Shipping address', 'Payment details'];
+const steps = ['Shipping address', isDemoMode ? 'Simulated payment' : 'Payment details'];
 
 const CheckoutSession = ({ cart, onCaptureCheckout, order, onComplete }) => {
   const [checkoutToken, setCheckoutToken] = useState(null);
@@ -20,9 +21,19 @@ const CheckoutSession = ({ cart, onCaptureCheckout, order, onComplete }) => {
   const [tokenAttempt, setTokenAttempt] = useState(0);
   const currentToken = useRef(null);
   const updating = useRef(false);
+  const reviewHeading = useRef(null);
+  const confirmationHeading = useRef(null);
+  const isEmpty = Array.isArray(cart.line_items) && cart.line_items.length === 0;
 
   useEffect(() => {
-    if (!cart.id || order) return;
+    const heading = order ? confirmationHeading.current : activeStep === 1 ? reviewHeading.current : null;
+    if (!heading) return;
+    heading.focus();
+    heading.scrollIntoView?.({ block: 'start' });
+  }, [activeStep, order]);
+
+  useEffect(() => {
+    if (!cart.id || order || isEmpty) return;
     let active = true;
     currentToken.current = null;
     updating.current = false;
@@ -43,7 +54,7 @@ const CheckoutSession = ({ cart, onCaptureCheckout, order, onComplete }) => {
       active = false;
       currentToken.current = null;
     };
-  }, [cart.id, order, tokenAttempt]);
+  }, [cart.id, order, tokenAttempt, isEmpty]);
 
   const submitShipping = async (data) => {
     if (updating.current) return;
@@ -95,7 +106,6 @@ const CheckoutSession = ({ cart, onCaptureCheckout, order, onComplete }) => {
 
   return (
     <>
-      <Box sx={styles.toolbar} />
       <Box component="main" sx={styles.layout}>
         <Paper sx={styles.paper}>
           <Typography component="h1" variant="h4" align="center">Checkout</Typography>
@@ -104,17 +114,23 @@ const CheckoutSession = ({ cart, onCaptureCheckout, order, onComplete }) => {
           </Stepper>
           {order ? (
             <>
-              <Typography variant="h5">Thank you for your purchase{order.customer?.firstname ? `, ${order.customer.firstname}` : ''}!</Typography>
+              <Typography component="h2" variant="h5" ref={confirmationHeading} tabIndex={-1} sx={{ scrollMarginTop: 96 }}>{order.demo ? 'Demo order complete' : `Thank you for your purchase${order.customer?.firstname ? `, ${order.customer.firstname}` : ''}!`}</Typography>
+              {order.demo && <Typography sx={{ mt: 1 }}>This was a simulated purchase. No payment was taken and no goods will be delivered.</Typography>}
               <Divider sx={styles.divider} />
               <Typography variant="subtitle2">Order ref: {order.customer_reference || order.id}</Typography>
               <br />
               <Button component={Link} variant="outlined" href="/">Back to home</Button>
             </>
+          ) : isEmpty ? (
+            <>
+              <Typography sx={{ mb: 2 }}>Your cart is empty. Add a product to start checkout.</Typography>
+              <Button component={Link} href="/" variant="contained">Browse products</Button>
+            </>
           ) : checkoutToken ? (
             activeStep === 0 ? (
               <AddressForm checkoutToken={checkoutToken} shippingData={shippingData} onSubmit={submitShipping} isSubmitting={isUpdating} error={error} />
             ) : (
-              <PaymentForm checkoutToken={checkoutToken} backStep={() => setActiveStep(0)} shippingData={shippingData} onCaptureCheckout={onCaptureCheckout} onComplete={completeOrder} />
+              <PaymentForm checkoutToken={checkoutToken} backStep={() => setActiveStep(0)} shippingData={shippingData} onCaptureCheckout={onCaptureCheckout} onComplete={completeOrder} reviewHeadingRef={reviewHeading} />
             )
           ) : error ? (
             <>

@@ -3,6 +3,8 @@
 - Date: 2026-11-01
 - Status: Accepted
 
+Follow-up: [0002 — seeded demo](0002-seeded-demo.md) adds the credential-free purchase flow after this foundation decision.
+
 ## Context
 
 Joy's Store began as a Create React App storefront. Catalog, cart, shipping, and order operations use Commerce.js, and Stripe Elements collects payment details. Recent fixes added regression coverage for checkout correctness and recoverable failures.

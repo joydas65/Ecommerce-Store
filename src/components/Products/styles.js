@@ -1,5 +1,4 @@
 const styles = {
-  toolbar: (theme) => theme.mixins.toolbar,
   content: {
     flexGrow: 1,
     backgroundColor: 'background.default',

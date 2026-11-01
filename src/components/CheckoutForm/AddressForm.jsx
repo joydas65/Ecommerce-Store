@@ -7,9 +7,10 @@ import Link from 'next/link';
 
 import { commerce } from '../../lib/commerce';
 import FormInput from './CustomTextField';
+import { isDemoMode } from '../../lib/commerce-mode';
 
 const AddressForm = ({ checkoutToken, shippingData = {}, onSubmit, isSubmitting = false, error = '' }) => {
-  const [savedAddress] = useState(shippingData);
+  const [savedAddress, setSavedAddress] = useState(shippingData);
   const [countries, setCountries] = useState({ requestKey: null, choices: {}, error: '' });
   const [shippingCountry, setShippingCountry] = useState('');
   const [regions, setRegions] = useState(null);
@@ -116,6 +117,24 @@ const AddressForm = ({ checkoutToken, shippingData = {}, onSubmit, isSubmitting 
   return (
     <>
       <Typography variant="h6" gutterBottom>Shipping address</Typography>
+      {isDemoMode && (
+        <>
+          <Typography variant="body2" color="text.secondary">Use fictitious details for this demo. Your address is used only for this checkout and is not saved.</Typography>
+          <Button type="button" disabled={submitting || countriesLoading} sx={{ my: 1 }} onClick={() => {
+            const sampleAddress = {
+              firstName: 'Alex', lastName: 'Morgan', email: 'demo@example.com', address1: '123 Demo Street', city: 'San Francisco', zip: '94105',
+              shippingCountry: 'US', shippingSubdivision: 'CA',
+            };
+            methods.reset(sampleAddress);
+            // Lookups must restore the newly selected sample destination,
+            // including when a previous address used another US region.
+            setSavedAddress(sampleAddress);
+            setShippingCountry('US');
+            setRegions(null);
+            setOptions(null);
+          }}>Use sample address</Button>
+        </>
+      )}
       <FormProvider {...methods}>
         <form onSubmit={methods.handleSubmit(async (data) => {
           if (ready && !submitting) {

@@ -1,5 +1,4 @@
 const styles = {
-  toolbar: (theme) => theme.mixins.toolbar,
   layout: {
     width: '100%',
     maxWidth: 600,

@@ -1,8 +1,9 @@
 import { Typography, List, ListItem, ListItemText } from '@mui/material';
+import { isDemoMode } from '../../lib/commerce-mode';
 
-const Review = ({ checkoutToken }) => (
+const Review = ({ checkoutToken, headingRef }) => (
   <>
-    <Typography variant="h6" gutterBottom>Order summary</Typography>
+    <Typography component="h2" variant="h6" ref={headingRef} tabIndex={-1} sx={{ scrollMarginTop: 96 }} gutterBottom>Order summary</Typography>
     <List disablePadding>
       {checkoutToken.live.line_items.map((product) => (
         <ListItem sx={{ py: 1.25, px: 0 }} key={product.id}>
@@ -20,7 +21,7 @@ const Review = ({ checkoutToken }) => (
       </ListItem>
       {checkoutToken.live.tax?.amount && (
         <ListItem sx={{ py: 1.25, px: 0 }}>
-          <ListItemText primary={checkoutToken.live.tax.included_in_price ? 'Tax (included)' : 'Tax'} />
+          <ListItemText primary={isDemoMode ? 'Sample tax (8%)' : checkoutToken.live.tax.included_in_price ? 'Tax (included)' : 'Tax'} />
           <Typography variant="body2">{checkoutToken.live.tax.amount.formatted_with_symbol}</Typography>
         </ListItem>
       )}

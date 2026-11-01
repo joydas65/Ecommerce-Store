@@ -274,3 +274,36 @@ test('preserves confirmation when cart clearing and refresh resolve alongside or
   expect(screen.queryByRole('button', { name: 'Continue with standard shipping' })).not.toBeInTheDocument();
   expect(screen.queryByRole('progressbar', { name: 'Loading checkout' })).not.toBeInTheDocument();
 });
+
+test('offers browsing instead of starting checkout for an empty cart', () => {
+  renderCheckout({ cart: { id: 'cart_empty', line_items: [], total_items: 0 } });
+
+  expect(screen.getByText('Your cart is empty. Add a product to start checkout.')).toBeVisible();
+  expect(screen.getByRole('link', { name: 'Browse products' })).toHaveAttribute('href', '/');
+  expect(commerce.checkout.generateToken).not.toHaveBeenCalled();
+  expect(screen.queryByRole('progressbar', { name: 'Loading checkout' })).not.toBeInTheDocument();
+});
+
+test('labels a confirmed demo receipt as simulated and preserves it when the cart empties', async () => {
+  const demoOrder = { ...order, id: 'DEMO-123', customer_reference: 'DEMO-123', demo: true };
+  const props = renderCheckout({ onCaptureCheckout: jest.fn().mockResolvedValue(demoOrder) });
+  fireEvent.click(await continueToPayment());
+
+  expect(await screen.findByRole('heading', { name: 'Demo order complete' })).toBeVisible();
+  expect(screen.getByText('Order ref: DEMO-123')).toBeVisible();
+  expect(screen.getByText(/No payment was taken and no goods will be delivered/)).toBeVisible();
+  props.rerender(<Checkout cart={{ id: 'cart_next', line_items: [], total_items: 0 }} onCaptureCheckout={props.onCaptureCheckout} />);
+  expect(screen.getByRole('heading', { name: 'Demo order complete' })).toBeVisible();
+  expect(screen.queryByText(/Your cart is empty/)).not.toBeInTheDocument();
+});
+
+test('moves focus to payment and confirmation headings only after those step transitions', async () => {
+  renderCheckout();
+  const continueButton = await screen.findByRole('button', { name: 'Continue with standard shipping' });
+  expect(document.activeElement).toBe(document.body);
+  fireEvent.click(continueButton);
+  const payButton = await screen.findByRole('button', { name: 'Pay $27.00' });
+  expect(screen.getByRole('heading', { name: 'Order summary' })).toHaveFocus();
+  fireEvent.click(payButton);
+  expect(await screen.findByRole('heading', { name: 'Thank you for your purchase, Joy!' })).toHaveFocus();
+});
