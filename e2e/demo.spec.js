@@ -1,8 +1,8 @@
 import { test, expect } from './demo-fixture';
 
 async function addProduct(page, name, expectedItems) {
-  await page.getByRole('button', { name: `Add ${name} to cart`, exact: true }).click();
-  await expect(page.getByRole('link', { name: /^Show cart items/ })).toHaveText(String(expectedItems));
+  await page.getByRole('button', { name: `Add to cart: ${name}`, exact: true }).click();
+  await expect(page.getByRole('link', { name: /^Cart \d+ items?$/ })).toHaveAccessibleName(`Cart ${expectedItems} ${expectedItems === 1 ? 'item' : 'items'}`);
 }
 
 async function sampleAddress(page) {
@@ -18,7 +18,7 @@ async function summaryAmount(page, label, amount) {
 
 test('browses local products, persists a cart, and completes a simulated purchase with shipping and tax', async ({ page }) => {
   await page.goto('/');
-  await expect(page.getByRole('button', { name: /^Add .+ to cart$/ })).toHaveCount(6);
+  await expect(page.getByRole('button', { name: /^Add to cart: / })).toHaveCount(6);
   const productImages = page.getByRole('main').getByRole('img');
   await expect(productImages).toHaveCount(6);
   for (const image of await productImages.all()) {
@@ -29,7 +29,7 @@ test('browses local products, persists a cart, and completes a simulated purchas
 
   await addProduct(page, 'Desk Mat', 1);
   await addProduct(page, 'Notebook', 2);
-  await page.getByRole('link', { name: /^Show cart items/ }).click();
+  await page.getByRole('link', { name: /^Cart \d+ items?$/ }).click();
   await expect(page.getByText('Subtotal: $46.00', { exact: true })).toBeVisible();
   await page.getByRole('button', { name: 'Increase Desk Mat quantity', exact: true }).click();
   await expect(page.getByText('Subtotal: $80.00', { exact: true })).toBeVisible();
@@ -62,7 +62,7 @@ test('preserves the cart after a controlled payment failure and allows a success
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto('/');
   await addProduct(page, 'Notebook', 1);
-  await page.getByRole('link', { name: /^Show cart items/ }).click();
+  await page.getByRole('link', { name: /^Cart \d+ items?$/ }).click();
   await page.getByRole('link', { name: 'Checkout', exact: true }).click();
   await sampleAddress(page);
   await page.getByRole('button', { name: 'Next', exact: true }).click();
@@ -100,13 +100,13 @@ test('handles direct entry to an empty checkout without a loading loop', async (
   await expect(page.getByRole('progressbar')).toHaveCount(0);
   await page.getByRole('link', { name: 'Browse products', exact: true }).click();
   await expect(page).toHaveURL('/');
-  await expect(page.getByRole('button', { name: /^Add .+ to cart$/ })).toHaveCount(6);
+  await expect(page.getByRole('button', { name: /^Add to cart: / })).toHaveCount(6);
 });
 
 test('updates a stale checkout after another tab purchases and can start a new order', async ({ page, context }) => {
   await page.goto('/');
   await addProduct(page, 'Notebook', 1);
-  await page.getByRole('link', { name: /^Show cart items/ }).click();
+  await page.getByRole('link', { name: /^Cart \d+ items?$/ }).click();
   await page.getByRole('link', { name: 'Checkout', exact: true }).click();
   await sampleAddress(page);
   await page.getByRole('button', { name: 'Next', exact: true }).click();
@@ -122,7 +122,7 @@ test('updates a stale checkout after another tab purchases and can start a new o
   await expect(page.getByText('Your cart is empty. Add a product to start checkout.', { exact: true })).toBeVisible();
   await page.getByRole('link', { name: 'Browse products', exact: true }).click();
   await addProduct(page, 'Bottle', 1);
-  await page.getByRole('link', { name: /^Show cart items/ }).click();
+  await page.getByRole('link', { name: /^Cart \d+ items?$/ }).click();
   await page.getByRole('link', { name: 'Checkout', exact: true }).click();
   await sampleAddress(page);
   await page.getByRole('button', { name: 'Next', exact: true }).click();

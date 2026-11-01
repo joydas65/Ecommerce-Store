@@ -15,8 +15,8 @@ test('serves the demo with release identity, metadata, keyboard navigation, and 
   await expect(page).toHaveTitle("Joy's Store");
   await expect(page.locator('html')).toHaveAttribute('lang', 'en');
   await expect(page.locator('meta[name="description"]')).toHaveAttribute('content', /shipping.*order confirmation/i);
-  await expect(page.getByRole('heading', { name: 'Products', exact: true })).toBeVisible();
-  await expect(page.getByRole('button', { name: /^Add .+ to cart$/ })).toHaveCount(6);
+  await expect(page.getByRole('heading', { name: 'Everyday essentials. A calmer workspace.', exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: /^Add to cart: / })).toHaveCount(6);
 
   // Record a single-run navigation baseline, not a claimed Core Web Vitals score.
   const timing = await page.evaluate(() => {
@@ -32,9 +32,11 @@ test('serves the demo with release identity, metadata, keyboard navigation, and 
   await testInfo.attach('navigation-baseline.json', { body: JSON.stringify(timing, null, 2), contentType: 'application/json' });
 
   await page.keyboard.press('Tab');
+  await expect(page.getByRole('link', { name: 'Skip to content', exact: true })).toBeFocused();
+  await page.keyboard.press('Tab');
   await expect(page.getByRole('link', { name: /Joy's Store/ })).toBeFocused();
   await page.keyboard.press('Tab');
-  await expect(page.getByRole('link', { name: /^Show cart items/ })).toBeFocused();
+  await expect(page.getByRole('link', { name: /^Cart \d+ items?$/ })).toBeFocused();
   await page.keyboard.press('Enter');
   await expect(page).toHaveURL('/cart');
   await expect(page.getByText(/You have no items in your shopping cart/)).toBeVisible();

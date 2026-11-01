@@ -128,6 +128,18 @@ function StoreHarness() {
   </>;
 }
 
+function MutationOutcomeHarness({ onResult }) {
+  const { cart, handleAddToCart, cartActionError, isUpdatingCart } = useCommerce();
+  const add = async () => onResult(await handleAddToCart('product_1', 1));
+  return <>
+    <div>Cart items: {cart.total_items}</div>
+    <div>Update pending: {isUpdatingCart ? 'yes' : 'no'}</div>
+    {/* Keep this enabled to exercise the provider's lock independently of UI disabling. */}
+    <button onClick={add}>Request add</button>
+    {cartActionError && <div role="alert">{cartActionError}</div>}
+  </>;
+}
+
 test('recovers independently from initial catalog and cart failures', async () => {
   commerce.products.list.mockRejectedValueOnce(new Error('Offline'));
   commerce.cart.retrieve.mockRejectedValueOnce(new Error('Offline'));
@@ -152,6 +164,67 @@ test('reports a cart mutation failure without losing the previous cart', async (
   expect(await screen.findByRole('alert')).toHaveTextContent('Your cart could not be updated');
   expect(screen.getByText('Cart items: 2')).toBeInTheDocument();
 });
+
+test('returns an error outcome on add failure and a confirmed cart only after a successful retry', async () => {
+  const updatedCart = { id: 'cart_1', total_items: 3, line_items: [{ id: 'item_1', quantity: 3 }] };
+  commerce.cart.add.mockRejectedValueOnce(new Error('Offline')).mockResolvedValueOnce({ cart: updatedCart });
+  const onResult = jest.fn();
+  render(<CommerceProvider><MutationOutcomeHarness onResult={onResult} /></CommerceProvider>);
+  await screen.findByText('Cart items: 2');
+
+  await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Request add' })); });
+  expect(onResult).toHaveBeenNthCalledWith(1, { status: 'error' });
+  expect(screen.getByText('Cart items: 2')).toBeInTheDocument();
+  expect(screen.getByRole('alert')).toHaveTextContent('Your cart could not be updated');
+  expect(screen.getByText('Update pending: no')).toBeInTheDocument();
+
+  await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Request add' })); });
+  expect(onResult).toHaveBeenNthCalledWith(2, { status: 'success', cart: updatedCart });
+  expect(screen.getByText('Cart items: 3')).toBeInTheDocument();
+  expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+  expect(commerce.cart.add).toHaveBeenLastCalledWith('product_1', 1);
+});
+
+test('returns busy for a repeated in-flight add and confirms only the completed provider operation', async () => {
+  let finish;
+  commerce.cart.add.mockReturnValue(new Promise((resolve) => { finish = resolve; }));
+  const onResult = jest.fn();
+  render(<CommerceProvider><MutationOutcomeHarness onResult={onResult} /></CommerceProvider>);
+  await screen.findByText('Cart items: 2');
+
+  await act(async () => {
+    fireEvent.click(screen.getByRole('button', { name: 'Request add' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Request add' }));
+  });
+  expect(commerce.cart.add).toHaveBeenCalledTimes(1);
+  expect(onResult).toHaveBeenCalledTimes(1);
+  expect(onResult).toHaveBeenCalledWith({ status: 'busy' });
+  expect(screen.getByText('Cart items: 2')).toBeInTheDocument();
+  expect(screen.getByText('Update pending: yes')).toBeInTheDocument();
+  expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+
+  const updatedCart = { id: 'cart_1', total_items: 3 };
+  await act(async () => finish({ cart: updatedCart }));
+  expect(onResult).toHaveBeenCalledTimes(2);
+  expect(onResult).toHaveBeenLastCalledWith({ status: 'success', cart: updatedCart });
+  expect(screen.getByText('Cart items: 3')).toBeInTheDocument();
+  expect(screen.getByText('Update pending: no')).toBeInTheDocument();
+});
+
+test.each([undefined, {}, { cart: {} }, { cart: { id: 'cart_1', total_items: -1 } }])(
+  'does not confirm an add when the provider returns an invalid cart (%j)', async (response) => {
+    commerce.cart.add.mockResolvedValue(response);
+    const onResult = jest.fn();
+    render(<CommerceProvider><MutationOutcomeHarness onResult={onResult} /></CommerceProvider>);
+    await screen.findByText('Cart items: 2');
+
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Request add' })); });
+    expect(onResult).toHaveBeenCalledWith({ status: 'error' });
+    expect(screen.getByText('Cart items: 2')).toBeInTheDocument();
+    expect(screen.getByRole('alert')).toHaveTextContent('Your cart could not be updated');
+    expect(screen.getByText('Update pending: no')).toBeInTheDocument();
+  },
+);
 
 test('keeps cart state and initialization when the active page changes', async () => {
   commerce.cart.add.mockResolvedValue({ cart: { id: 'cart_1', total_items: 3 } });

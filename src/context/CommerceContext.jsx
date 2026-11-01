@@ -62,16 +62,25 @@ export function CommerceProvider({ children }) {
   }, [loadCart]);
 
   const changeCart = async (operation) => {
-    if (changingCart.current) return;
+    // Callers may confirm an update only after the provider returns a valid cart.
+    // A suppressed duplicate is a separate outcome, not an implicit success.
+    if (changingCart.current) return { status: 'busy' };
     changingCart.current = true;
     setIsUpdatingCart(true);
     setCartActionError('');
     try {
       const response = await operation();
-      setCart(response.cart);
+      const updatedCart = response?.cart;
+      if (typeof updatedCart?.id !== 'string' || !updatedCart.id
+        || !Number.isSafeInteger(updatedCart.total_items) || updatedCart.total_items < 0) {
+        throw new Error('The provider did not confirm the cart update.');
+      }
+      setCart(updatedCart);
       setCartStatus('ready');
+      return { status: 'success', cart: updatedCart };
     } catch {
       setCartActionError('Your cart could not be updated. Please try again.');
+      return { status: 'error' };
     } finally {
       changingCart.current = false;
       setIsUpdatingCart(false);

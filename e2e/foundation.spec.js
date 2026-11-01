@@ -39,7 +39,7 @@ for (const [route, message] of Object.entries(unavailableMessages)) {
 
 test('navigates between the storefront and cart using Next links', async ({ page }) => {
   await page.goto('/');
-  await page.getByRole('link', { name: /^Show cart items/ }).click();
+  await page.getByRole('link', { name: /^Cart \d+ items?$/ }).click();
   await expect(page).toHaveURL('/cart');
   await expect(page.getByRole('main').getByRole('alert')).toContainText(unavailableMessages['/cart']);
 

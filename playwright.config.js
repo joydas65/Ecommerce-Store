@@ -20,7 +20,7 @@ const htmlReporter = ['html', { open: 'never', outputFolder: `playwright-report/
 
 export default defineConfig({
   testDir: './e2e',
-  testMatch: mode === 'live' ? 'foundation.spec.js' : ['demo.spec.js', 'deployment.spec.js'],
+  testMatch: mode === 'live' ? 'foundation.spec.js' : ['demo.spec.js', 'deployment.spec.js', 'catalog.spec.js'],
   outputDir: `test-results/${reportName}`,
   timeout: deployedURL ? 90_000 : 30_000,
   expect: { timeout: deployedURL ? 10_000 : 5_000 },

@@ -1,35 +1,27 @@
 'use client';
 
-import { AppBar, Toolbar, IconButton, Badge, Box, Typography } from '@mui/material';
-import { ShoppingCart } from '@mui/icons-material';
-import Image from 'next/image';
+import { AppBar, Toolbar, Box, Typography, Button } from '@mui/material';
+import { ShoppingBagOutlined } from '@mui/icons-material';
 import Link from 'next/link';
-import { usePathname } from 'next/navigation';
 
-import logo from '../../assets/commerce.png';
 import styles from './styles';
 
-const Navbar = ({ totalItems }) => {
-  const pathname = usePathname();
-
-  return (
-    <AppBar position="sticky" sx={styles.appBar} color="inherit">
-      <Toolbar>
-        <Typography component={Link} href="/" variant="h6" sx={styles.title} color="inherit">
-          <Image src={logo} alt="" width={25} height={25} />
-          Joy&apos;s Store
-        </Typography>
-        <Box sx={styles.grow} />
-        {pathname === '/' && (
-          <IconButton component={Link} href="/cart" aria-label={`Show cart items: ${totalItems}`} color="inherit">
-            <Badge badgeContent={totalItems} max={999} color="secondary">
-              <ShoppingCart />
-            </Badge>
-          </IconButton>
-        )}
-      </Toolbar>
-    </AppBar>
-  );
-};
+const Navbar = ({ totalItems }) => (
+  <AppBar position="sticky" sx={styles.appBar} color="inherit" component="header">
+    <Toolbar sx={styles.toolbar}>
+      <Box component={Link} href="/" sx={styles.title}>
+        <Box component="span" sx={styles.mark} aria-hidden="true">j.</Box>
+        <Typography component="span" sx={styles.wordmark}>Joy&apos;s Store</Typography>
+      </Box>
+      <Typography component="span" sx={styles.tagline}>WORK & EVERYDAY</Typography>
+      <Button component={Link} href="/cart" variant="outlined" color="primary" sx={styles.cart}
+        aria-label={`Cart ${totalItems} ${totalItems === 1 ? 'item' : 'items'}`}>
+        <ShoppingBagOutlined sx={{ fontSize: 20 }} />
+        <Box component="span">Cart{' '}</Box>
+        <Box component="span" sx={styles.count}>{totalItems}</Box>
+      </Button>
+    </Toolbar>
+  </AppBar>
+);
 
 export default Navbar;

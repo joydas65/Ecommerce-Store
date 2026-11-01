@@ -14,6 +14,8 @@ The [Vercel release guide](docs/deployment.md) documents deployment checks, proj
 
 - Next.js App Router routes for the catalog (`/`), cart (`/cart`), and checkout (`/checkout`), including direct navigation and reloads.
 - Responsive product cards and cart quantity, removal, and clearing actions.
+- A workspace-inspired storefront, shared visual theme, visible add actions, and confirmed cart feedback with a direct View cart action.
+- Keyboard navigation, a skip link, and verified catalog layouts at phone, tablet, and desktop widths.
 - Six seeded products with local illustrations, a cart that survives reloads, sample address entry, and simulated order confirmations.
 - A controlled payment failure that preserves the cart and lets the shopper retry.
 - Shipping country, region, and delivery-method selection, including countries without regions.
@@ -55,7 +57,7 @@ The demo provider uses integer cents, $5 standard or $12 express shipping, and a
 
 The SDK’s Axios dependency is pinned to the patched 0.34.0 release through a scoped override. Contract tests cover the request and response shapes used by this app.
 
-In live mode, the browser passes a Stripe payment-method identifier to Commerce.js for order capture. Decision records explain the [framework foundation](docs/decisions/0001-next-foundation.md) and [demo provider boundary](docs/decisions/0002-seeded-demo.md).
+In live mode, the browser passes a Stripe payment-method identifier to Commerce.js for order capture. Decision records explain the [framework foundation](docs/decisions/0001-next-foundation.md), [demo provider boundary](docs/decisions/0002-seeded-demo.md), and [catalog-to-cart experience](docs/decisions/0003-catalog-to-cart-experience.md), including before-and-after screenshots.
 
 ## Run locally
 
@@ -139,14 +141,14 @@ Each milestone should leave a working, demonstrable application. Scope is one st
 | 1a. Project foundation | Implemented: maintained runtime, Next.js routes, npm lockfile, modern UI dependencies, and automated checks | Reproducibility, framework boundaries, migration safety |
 | 1b. Reproducible purchasing demo | Implemented: seeded products, explicit simulation mode, simulated purchases, and controlled failure recovery | Provider interfaces, deterministic testing, integration design |
 | 1c. Vercel release foundation | Deployed: Git integration, previews, CI and deployed purchase gates, release identity, and recovery instructions | Deployment safety, least-privilege automation, verifiable releases |
-| 2. Complete shopper experience | Planned: branding, product details, discovery, mobile polish, keyboard access, and measured performance | Product judgment, accessibility, frontend architecture |
+| 2. Complete shopper experience | Catalog branding, responsive cards, keyboard access, and confirmed add feedback implemented; product details and discovery remain planned | Product judgment, accessibility, frontend architecture |
 | 3. Full-stack order workflow | Planned: application API and database, authoritative price/availability checks, persisted orders, and authenticated merchant order management | Data modeling, authorization, concurrency, transaction boundaries |
 | 4. Reliable operation | Planned: duplicate-safe processing, provider reconciliation, deeper browser/API tests, structured diagnostics, and recovery instructions | Failure handling, observability, security, operating a service |
 | 5. Interview presentation | Hosted demo and decision records available; a polished walkthrough, screenshots, and broader measured results remain planned | Explaining tradeoffs and supporting claims with evidence |
 
-### Next milestone: polish the shopper experience
+### Next milestone: product details
 
-Improve product details, discovery, mobile interactions, and keyboard accessibility in small steps, with measured performance and a consistent visual identity.
+Add directly addressable product pages with useful specifications, images, and loading/not-found handling, building on the catalog's visual system. Extend the product-data contract explicitly before adding discovery features.
 
 ## Current limits
 
