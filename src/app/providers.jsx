@@ -2,6 +2,8 @@
 
 import { AppRouterCacheProvider } from '@mui/material-nextjs/v16-appRouter';
 import { Alert, Box, CssBaseline, ThemeProvider } from '@mui/material';
+import { usePathname } from 'next/navigation';
+import Link from 'next/link';
 import Navbar from '../components/Navbar/Navbar';
 import { CommerceProvider, useCommerce } from '../context/CommerceContext';
 import { usesSimulatedPayment, usesHostedStripe } from '../lib/storefront-config';
@@ -28,11 +30,21 @@ function StoreShell({ children }) {
 }
 
 export default function Providers({ children }) {
+  const merchant = usePathname()?.startsWith('/admin');
   return (
     <AppRouterCacheProvider>
       <ThemeProvider theme={theme}>
         <CssBaseline />
-        <CommerceProvider><StoreShell>{children}</StoreShell></CommerceProvider>
+        {merchant ? <>
+          <Box component="a" href="#main-content" sx={{ position: 'fixed', top: -80, left: 16, zIndex: 1500, px: 2, py: 1.5, bgcolor: 'primary.main', color: 'primary.contrastText', '&:focus': { top: 12 } }}>Skip to content</Box>
+          <Box component="header" sx={{ borderBottom: '1px solid', borderColor: 'divider' }}>
+            <Box sx={{ maxWidth: 1280, mx: 'auto', px: { xs: 3, sm: 4 }, py: 2.5, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 2 }}>
+              <Box component={Link} href="/admin/orders" sx={{ fontFamily: 'Georgia, serif', fontSize: 24, color: 'primary.main', textDecoration: 'none' }}>Joy&apos;s Store</Box>
+              <Box component={Link} href="/" sx={{ fontSize: 13, fontWeight: 600, color: 'primary.main' }}>Back to storefront</Box>
+            </Box>
+          </Box>
+          <Box id="main-content" tabIndex={-1}>{children}</Box>
+        </> : <CommerceProvider><StoreShell>{children}</StoreShell></CommerceProvider>}
       </ThemeProvider>
     </AppRouterCacheProvider>
   );

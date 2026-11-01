@@ -32,6 +32,7 @@ These GitHub repository **variables** are configured. They are identifiers rathe
 | `VERCEL_PROJECT_NAME` | `joys-store` |
 | `DEMO_ORDER_STORAGE` | `remote` for production; previews use `local` |
 | `PAYMENT_PROVIDER` | `stripe` for production; previews use simulation |
+| `MERCHANT_AUTH_ENABLED` | `true` for the merchant production release; previews use `false` |
 
 The Vercel project is connected to this GitHub repository with repository dispatch events enabled and production domain auto-assignment on. Native Deployment Checks require both of these GitHub checks for **production**:
 
@@ -96,6 +97,38 @@ A public sandbox-card purchase independently verified the complete flow: Noteboo
 
 To keep Stripe disabled, leave `PAYMENT_PROVIDER` unset or `simulated` in GitHub and select `simulated` in the storefront. A production setting change needs a new reviewed release; avoid reusing successful statuses for an older SHA.
 
+## Activate the private merchant inbox
+
+The read-only inbox is implemented. GitHub OAuth application registration and server-only configuration are prerequisites; those settings alone do not establish a successful release or sign-in. Use the checks below to establish deployment and external OAuth correctness for each activation.
+
+The backend owns Better Auth, GitHub OAuth and PostgreSQL sessions. The storefront owns `/admin/sign-in`, `/admin/orders`, `/admin/orders/[id]` and the same-origin BFF. Public guest checkout stays available independently.
+
+| Scope | Configuration |
+| --- | --- |
+| Storefront production | `MERCHANT_AUTH_ENABLED=true`, `MERCHANT_AUTH_ORIGIN=https://joys-store.vercel.app`, existing verified `ORDERS_API_URL` |
+| Backend production | `MERCHANT_AUTH_ENABLED=true`, matching `BETTER_AUTH_URL`, independent `BETTER_AUTH_SECRET`, GitHub OAuth client credentials, `MERCHANT_GITHUB_IDS` |
+| GitHub OAuth App | Exact storefront callback `https://joys-store.vercel.app/api/auth/callback/github` |
+| Local integration | Explicit loopback opt-ins on both services; disposable PostgreSQL and synthetic credentials only |
+| Previews | Merchant auth disabled unless a separate isolated backend, database and OAuth configuration are supplied |
+
+None of the merchant variables use `NEXT_PUBLIC_`. The storefront does not receive the session signing secret, OAuth client secret, database credential or merchant allowlist. Its existing checkout service credential is not a merchant credential. OAuth is bound to the canonical storefront origin; an immutable deployment URL is not a second production sign-in origin.
+
+Release in this order:
+
+1. Verify the backend's real-PostgreSQL query and authentication tests, syntax checks, release checks and dependency audit. Apply additive migrations `003_merchant_orders.sql` and `004_merchant_auth.sql` through its main-only checked migration job.
+2. Release the backend and confirm anonymous merchant reads fail closed while guest checkout and Stripe webhooks remain healthy. Auth configuration is initialized only for merchant/auth operations; a failure cannot grant access or disable the guest flow.
+3. Set the storefront GitHub repository variable `MERCHANT_AUTH_ENABLED=true` for this production activation. The deployed merchant gate requires an explicit boolean and uses `false` for previews. Pin storefront CI to the reviewed backend revision. Its local merchant suite uses real signed sessions and a disposable database, with no production cookie, OAuth secret or database credential.
+4. Release the storefront through the existing lint, unit, browser and deployed gates. Verify the public health revision. Anonymous access to `/admin/orders` should lead to sign-in; anonymous merchant APIs should return 401 when configured.
+5. On the canonical production origin, complete GitHub sign-in with an approved account, inspect a retained order, exercise filters and pagination, reload its detail, and sign out. Confirm the old session no longer authorizes reads. Verify ordinary authenticated and anonymous rejection through the automated tests. Fixture-based local checks do not prove the external OAuth callback works.
+
+Only explicit immutable GitHub IDs grant access, checked before signup and again against the persisted linked account for every merchant request. There is no bootstrap rule that makes the first user an administrator. Session cookies are host-only, HttpOnly, SameSite=Lax and Secure in production; they expire after eight hours without automatic extension. Sign-out deletes the database session. Removing an ID from the backend allowlist and deploying revokes its merchant authorization even if its cookie has not expired. Rotating the session secret invalidates all signed sessions.
+
+The BFF forwards only the `joys_merchant` cookie family and preserves every approved state/session `Set-Cookie` header. It rejects cross-origin sign-in/sign-out, unknown auth routes, arbitrary providers and callback destinations, and unsafe redirects. Merchant APIs expose no guest identity, session token, provider credentials, checkout URL or internal payment ID. Keep authenticated traces, cookie fixtures and browser storage-state files out of CI artifacts.
+
+Auth tables retain merchant profile/email, encrypted OAuth credentials, sessions, OAuth state and rate-limit counters. Guest orders continue to omit personal shipping data. Daily backend cleanup removes expired sessions/state and counters older than a day while retaining stable merchant identities. Database-backed rate limiting survives function restarts but is conservative behind the BFF and may share a bucket; this release does not claim per-person/IP abuse protection.
+
+See [decision 0008](decisions/0008-merchant-order-inbox.md) and the [backend runbook](https://github.com/joydas65/Ecommerce-Orders/blob/main/docs/deployment.md#merchant-authentication-and-inbox) for the access boundary and recovery details. The inbox remains read-only; payment reconciliation, fulfillment changes and their audit trail need a subsequent reviewed increment.
+
 ## Inspect a release
 
 Use an authenticated Vercel CLI linked to the intended project:
@@ -111,11 +144,12 @@ To run the deployed suite locally, use the immutable URL and full commit shown b
 E2E_BASE_URL=https://<deployment-host>.vercel.app \
 E2E_EXPECTED_COMMIT_SHA=<full-commit-sha> \
 E2E_MODE=stripe \
+E2E_MERCHANT_ENABLED=true \
 E2E_ORDER_STORAGE=remote \
 npm run test:e2e:deployed
 ```
 
-The suite starts no local server. Stripe mode checks the health revision and capabilities, product routes and assets, a real unpaid sandbox session, private receipt reload, and cancellation without clearing the cart. Use `E2E_MODE=demo` for a simulated deployment; that suite also covers completed purchases, controlled failures, keyboard access, and cross-tab cart synchronization. Reports are written to `playwright-report/deployed` and `test-results/deployed`. A paid sandbox checkout must be verified separately with test card `4242 4242 4242 4242`, a future expiry, and a three-digit CVC.
+The suite starts no local server. Set `E2E_MERCHANT_ENABLED=true` for a configured production inbox or `false` for a disabled environment; omitting it fails the gate. Merchant deployed checks verify sign-in navigation, noindex/no-store behavior and denial of anonymous or spoofed-identity API reads. They never sign in, call GitHub or acquire auth cookies. Stripe mode checks the health revision and capabilities, product routes and assets, a real unpaid sandbox session, private receipt reload, and cancellation without clearing the cart. Use `E2E_MODE=demo` for a simulated deployment; that suite also covers completed purchases, controlled failures, keyboard access, and cross-tab cart synchronization. Reports are written to `playwright-report/deployed` and `test-results/deployed`. A paid sandbox checkout must be verified separately with test card `4242 4242 4242 4242`, a future expiry, and a three-digit CVC.
 
 ## Roll back and resume
 
@@ -135,6 +169,7 @@ Do not use Force Promote to turn a failed check into a successful release. Promo
 - **Checks pass but the domain remains on an older release:** inspect native Deployment Checks, exact check names, and whether a previous rollback disabled auto-assignment.
 - **Repeated deployment of the same SHA:** GitHub statuses are commit-scoped and may reuse an earlier success. Use a new commit for normal releases. For an intentional same-SHA configuration rebuild, stage production without assigning domains, test that exact deployment URL, and promote that tested production build explicitly.
 - **Test purchases only:** production uses Stripe sandbox payments and previews use simulation, both with seeded fixtures. Use sample customer details. A real commerce release needs its own operational readiness and environment review.
+- **Merchant sign-in unavailable:** confirm both server-only enable flags, matching canonical origins, backend OAuth configuration, callback registration and completed auth migrations. Keep previews disabled instead of sharing production auth state. An unauthorized GitHub identity must never be added automatically.
 - **Recovery scope:** rolling back either application does not revert database writes. Keep migrations backward-compatible, preserve idempotency records through their retention period, and inspect the backend recovery guide before a schema change.
 
 References: [Vercel Git integration](https://vercel.com/docs/git/vercel-for-github), [Deployment Checks](https://vercel.com/docs/deployment-checks), [rollback](https://vercel.com/docs/cli/rollback), [promotion](https://vercel.com/docs/cli/promote).

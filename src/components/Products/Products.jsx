@@ -2,6 +2,7 @@
 
 import { Box, Button, Grid, Typography, Alert } from '@mui/material';
 import { ArrowForward } from '@mui/icons-material';
+import Link from 'next/link';
 import useAddToCart from '../../hooks/useAddToCart';
 import CartConfirmation from '../CartFeedback/CartConfirmation';
 
@@ -62,6 +63,7 @@ const Products = ({ products, totalProducts = products.length, query = '', contr
         <Typography sx={styles.endMark}>j.</Typography>
         <Typography variant="body2">A few good things for your everyday.</Typography>
         <Typography variant="caption" color="text.secondary">Joy&apos;s Store · Work & everyday</Typography>
+        <Button component={Link} href="/admin/orders" size="small">Merchant access</Button>
       </Box>
       <CartConfirmation added={added} onDismiss={dismiss} />
     </Box>

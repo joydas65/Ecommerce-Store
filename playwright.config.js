@@ -18,12 +18,14 @@ if (deployedURL) {
 const baseURL = deployedURL ? new URL(deployedURL).origin : 'http://127.0.0.1:3100';
 const reportName = deployedURL ? 'deployed' : mode === 'stripe' ? 'stripe-contract' : persistentOrders ? 'persistent' : mode;
 const htmlReporter = ['html', { open: 'never', outputFolder: `playwright-report/${reportName}` }];
+const testMatch = mode === 'live' ? ['foundation.spec.js'] : mode === 'stripe'
+  ? [deployedURL ? 'stripe-deployment.spec.js' : 'stripe-contract.spec.js']
+  : ['demo.spec.js', 'deployment.spec.js', 'catalog.spec.js', 'product.spec.js', 'discovery.spec.js', ...(persistentOrders ? ['persistent-orders.spec.js'] : [])];
+if (deployedURL) testMatch.push('merchant-deployment.spec.js');
 
 export default defineConfig({
   testDir: './e2e',
-  testMatch: mode === 'live' ? 'foundation.spec.js' : mode === 'stripe'
-    ? deployedURL ? 'stripe-deployment.spec.js' : 'stripe-contract.spec.js'
-    : ['demo.spec.js', 'deployment.spec.js', 'catalog.spec.js', 'product.spec.js', 'discovery.spec.js', ...(persistentOrders ? ['persistent-orders.spec.js'] : [])],
+  testMatch,
   outputDir: `test-results/${reportName}`,
   timeout: deployedURL ? 90_000 : 30_000,
   expect: { timeout: deployedURL ? 10_000 : 5_000 },
