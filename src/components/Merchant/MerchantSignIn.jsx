@@ -34,7 +34,7 @@ export default function MerchantSignIn({ available, failed = false, forbidden = 
           {busy ? 'Opening GitHub…' : 'Sign in with GitHub'}
         </Button>
       </>}
-      <Typography variant="body2" color="text.secondary" sx={{ mt: 2 }}>Read-only order access. This store contains Stripe test payments and simulated purchases.</Typography>
+      <Typography variant="body2" color="text.secondary" sx={{ mt: 2 }}>Review orders and recheck unresolved Stripe test payments. Each merchant check is recorded in the order history.</Typography>
     </Paper>
     <Button component={Link} href="/" sx={{ mt: 2 }}>Back to storefront</Button>
   </Box>;

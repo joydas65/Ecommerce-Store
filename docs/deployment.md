@@ -99,7 +99,7 @@ To keep Stripe disabled, leave `PAYMENT_PROVIDER` unset or `simulated` in GitHub
 
 ## Activate the private merchant inbox
 
-The read-only inbox is implemented. GitHub OAuth application registration and server-only configuration are prerequisites; those settings alone do not establish a successful release or sign-in. Use the checks below to establish deployment and external OAuth correctness for each activation.
+The merchant inbox and audited payment recheck are implemented. GitHub OAuth application registration and server-only configuration are prerequisites; those settings alone do not establish a successful release or sign-in. Use the checks below to establish deployment and external OAuth correctness for each activation.
 
 The backend owns Better Auth, GitHub OAuth and PostgreSQL sessions. The storefront owns `/admin/sign-in`, `/admin/orders`, `/admin/orders/[id]` and the same-origin BFF. Public guest checkout stays available independently.
 
@@ -123,11 +123,23 @@ Release in this order:
 
 Only explicit immutable GitHub IDs grant access, checked before signup and again against the persisted linked account for every merchant request. There is no bootstrap rule that makes the first user an administrator. Session cookies are host-only, HttpOnly, SameSite=Lax and Secure in production; they expire after eight hours without automatic extension. Sign-out deletes the database session. Removing an ID from the backend allowlist and deploying revokes its merchant authorization even if its cookie has not expired. Rotating the session secret invalidates all signed sessions.
 
-The BFF forwards only the `joys_merchant` cookie family and preserves every approved state/session `Set-Cookie` header. It rejects cross-origin sign-in/sign-out, unknown auth routes, arbitrary providers and callback destinations, and unsafe redirects. Merchant APIs expose no guest identity, session token, provider credentials, checkout URL or internal payment ID. Keep authenticated traces, cookie fixtures and browser storage-state files out of CI artifacts.
+The BFF forwards only the `joys_merchant` cookie family and preserves every approved state/session `Set-Cookie` header. It rejects cross-origin sign-in/sign-out/payment rechecks, unknown auth routes, arbitrary providers and callback destinations, and unsafe redirects. Merchant APIs expose no guest identity, session token, provider credentials, checkout URL or internal payment ID. Keep authenticated traces, cookie fixtures and browser storage-state files out of CI artifacts.
 
 Auth tables retain merchant profile/email, encrypted OAuth credentials, sessions, OAuth state and rate-limit counters. Guest orders continue to omit personal shipping data. Daily backend cleanup removes expired sessions/state and counters older than a day while retaining stable merchant identities. Database-backed rate limiting survives function restarts but is conservative behind the BFF and may share a bucket; this release does not claim per-person/IP abuse protection.
 
-See [decision 0008](decisions/0008-merchant-order-inbox.md) and the [backend runbook](https://github.com/joydas65/Ecommerce-Orders/blob/main/docs/deployment.md#merchant-authentication-and-inbox) for the access boundary and recovery details. The inbox remains read-only; payment reconciliation, fulfillment changes and their audit trail need a subsequent reviewed increment.
+See [decision 0008](decisions/0008-merchant-order-inbox.md) and the [backend runbook](https://github.com/joydas65/Ecommerce-Orders/blob/main/docs/deployment.md#merchant-authentication-and-inbox) for the access boundary and recovery details. The only merchant write is the audited recheck of an existing Stripe test session. Fulfillment changes and refunds remain separate increments. See [decision 0009](decisions/0009-merchant-payment-recovery.md).
+
+## Release audited payment recovery
+
+Apply the additive merchant-payment-check migration through the backend's normal verified main-only job, then release the backward-compatible backend before the storefront. No new vendor, credentials or environment flags are required. Pin storefront CI to the released backend revision.
+
+Run `npm run test:e2e:merchant` with disposable local PostgreSQL and the local session signing fixture. Playwright starts `scripts/test/merchant-recheck-service.mjs` itself on port 4101. The fixture refuses Vercel and non-loopback databases; its separate HTTP provider exercises the actual Stripe SDK timeout and signed webhook path. CI does not receive production merchant cookies or Stripe credentials.
+
+After release, sign in on the canonical origin. On an unresolved Stripe test order with an existing session, recheck payment status, verify the audit actor/outcome and reload the page. For a still-unpaid session, the saved status must stay pending. Check a completed request replay and inspect scoped runtime errors. Do not interpret a recorded check as a successful payment: only the saved verified status establishes payment.
+
+The browser retains its request UUID in session storage after an ambiguous result. Use **Recover previous check** rather than creating another request. A completed request can be replayed even if a concurrent webhook already resolved the order. Rate limits and in-flight checks expose a retry time. If a function terminates, lease recovery fences off the old worker; the same request can be recovered after the lease expires.
+
+The audit endpoint exposes only a bounded recent history and indicates when more events exist. Audit data includes merchant identity snapshots and is private. Application append-only events do not provide database-owner tamper resistance. Code rollback leaves additive schema and recorded checks intact; verify schema compatibility before rolling back.
 
 ## Inspect a release
 

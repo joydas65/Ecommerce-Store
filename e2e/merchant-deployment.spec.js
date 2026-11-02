@@ -65,7 +65,7 @@ test('keeps merchant pages behind sign-in without exposing private order records
 
 test('denies unauthenticated merchant APIs and rejects spoofed identity headers', async ({ page }) => {
   const expected = enabled ? 401 : 503;
-  for (const route of ['/api/merchant/orders', `/api/merchant/orders/${missingOrder}`, '/api/merchant/session']) {
+  for (const route of ['/api/merchant/orders', `/api/merchant/orders/${missingOrder}`, `/api/merchant/orders/${missingOrder}/payment-checks`, '/api/merchant/session']) {
     await expectDenied(await page.request.get(route), expected);
   }
   const spoofed = await page.request.get('/api/merchant/orders', { headers: {
@@ -75,6 +75,12 @@ test('denies unauthenticated merchant APIs and rejects spoofed identity headers'
     'X-Merchant-User-ID': 'client-supplied-identity',
   } });
   await expectDenied(spoofed, expected);
+  // This performs no payment operation: the write must reject its Origin
+  // before forwarding any request to the backend or provider.
+  await expectDenied(await page.request.post(`/api/merchant/orders/${missingOrder}/recheck-payment`, {
+    headers: { Origin: 'https://untrusted.example', 'Sec-Fetch-Site': 'cross-site', Authorization: 'Bearer forged' },
+    data: { requestId: '00000000-0000-4000-8000-000000000000' },
+  }), enabled ? 403 : 503);
 });
 
 test('keeps unsupported auth endpoints unavailable and rejects cross-origin sign-out', async ({ page, baseURL }) => {

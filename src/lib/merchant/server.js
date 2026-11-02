@@ -8,8 +8,15 @@ const messages = {
   403: ['MERCHANT_FORBIDDEN', 'This account does not have merchant access.'],
   404: ['ORDER_NOT_FOUND', 'This order is unavailable.'],
   405: ['METHOD_NOT_ALLOWED', 'This operation is unavailable.'],
+  409: ['PAYMENT_CHECK_CONFLICT', 'Refresh this order before checking its payment again.'],
   429: ['RATE_LIMITED', 'Too many sign-in requests. Please wait before trying again.'],
   503: ['MERCHANT_UNAVAILABLE', 'Merchant access is temporarily unavailable. Please try again.'],
+};
+const paymentCheckMessages = {
+  PAYMENT_CHECK_IN_PROGRESS: [409, 'A payment check is already running. Wait briefly, then recover its result.'],
+  PAYMENT_CHECK_NOT_ELIGIBLE: [409, 'This order is not eligible for a payment check. Refresh its saved status.'],
+  IDEMPOTENCY_CONFLICT: [409, 'This request belongs to another order. Refresh before trying again.'],
+  PAYMENT_CHECK_RATE_LIMITED: [429, 'Please wait before checking payment status again.'],
 };
 
 export function merchantError(status) {
@@ -84,6 +91,42 @@ export async function forwardMerchantRequest(request, path, options) {
   if (new URL(request.url).search.length > 8192) return merchantError(400);
   const result = await readMerchant(path, request.headers.get('cookie'), options);
   return result.status === 200 ? Response.json(result.data, { headers: privateHeaders }) : merchantError(result.status);
+}
+
+// This is the only merchant write exposed by the storefront. The destination,
+// payload and forwarded identity are fixed here; the backend independently
+// authorizes the database session and checks the canonical Origin again.
+export async function forwardMerchantPaymentCheck(request, orderId, { fetchImpl = globalThis.fetch, env = process.env } = {}) {
+  if (request.method !== 'POST') return merchantError(405);
+  if (!/^order_[\da-f]{8}-[\da-f]{4}-[\da-f]{4}-[\da-f]{4}-[\da-f]{12}$/i.test(orderId)) return merchantError(404);
+  let config;
+  try { config = merchantConfig(env); } catch { return merchantError(503); }
+  if (request.headers.get('origin') !== config.origin
+    || ![null, 'same-origin', 'none'].includes(request.headers.get('sec-fetch-site'))) return merchantError(403);
+  if (new URL(request.url).search || request.headers.get('content-type')?.split(';')[0].trim().toLowerCase() !== 'application/json') return merchantError(400);
+  const cookie = merchantCookies(request.headers.get('cookie'));
+  if (!cookie) return merchantError(401);
+  let input;
+  try { input = await jsonWithinLimit(request, 1024); } catch { return merchantError(400); }
+  if (!input || typeof input !== 'object' || Array.isArray(input) || Object.keys(input).join(',') !== 'requestId'
+    || typeof input.requestId !== 'string' || !/^[\da-f]{8}-[\da-f]{4}-[\da-f]{4}-[\da-f]{4}-[\da-f]{12}$/i.test(input.requestId)) return merchantError(400);
+  try {
+    const upstream = await fetchImpl(`${config.base}/v1/merchant/orders/${orderId}/recheck-payment`, {
+      method: 'POST', headers: { Cookie: cookie, Origin: config.origin, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ requestId: input.requestId }), cache: 'no-store', redirect: 'error', signal: AbortSignal.timeout(12000),
+    });
+    if (upstream.status === 200) return Response.json(await jsonWithinLimit(upstream), { headers: privateHeaders });
+    if ([409, 429].includes(upstream.status)) {
+      const data = await jsonWithinLimit(upstream, 16384);
+      const known = Object.hasOwn(paymentCheckMessages, data?.error?.code) ? paymentCheckMessages[data.error.code] : null;
+      if (!known || known[0] !== upstream.status) return merchantError(503);
+      const retryAt = data.error.retryAt;
+      const retry = typeof retryAt === 'string' && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/.test(retryAt)
+        && Number.isFinite(Date.parse(retryAt)) ? { retryAt } : {};
+      return Response.json({ error: { code: data.error.code, message: known[1], ...retry } }, { status: upstream.status, headers: privateHeaders });
+    }
+    return merchantError([400, 401, 403, 404].includes(upstream.status) ? upstream.status : 503);
+  } catch { return merchantError(503); }
 }
 
 const authMethods = { 'ok': 'GET', 'callback/github': 'GET', 'sign-in/social': 'POST', 'sign-out': 'POST' };

@@ -10,7 +10,7 @@ const baseURL = 'http://127.0.0.1:3100';
 
 export default defineConfig({
   testDir: './e2e',
-  testMatch: 'merchant.spec.js',
+  testMatch: ['merchant.spec.js', 'merchant-payment-checks.spec.js'],
   outputDir: 'test-results/merchant',
   fullyParallel: false,
   workers: 1,
@@ -27,7 +27,22 @@ export default defineConfig({
     screenshot: 'only-on-failure',
   },
   projects: [{ name: 'chromium', use: { ...devices['Desktop Chrome'], ...(process.env.PLAYWRIGHT_CHANNEL ? { channel: process.env.PLAYWRIGHT_CHANNEL } : {}) } }],
-  webServer: {
+  webServer: [{
+    command: 'node scripts/test/merchant-recheck-service.mjs',
+    url: 'http://127.0.0.1:4101/health',
+    reuseExistingServer: false,
+    timeout: 30_000,
+    env: {
+      MERCHANT_TEST_FIXTURES: 'true',
+      ORDERS_API_SECRET: process.env.ORDERS_API_SECRET || 'local-orders-test-secret-at-least-32-characters',
+      MERCHANT_AUTH_ENABLED: 'true',
+      BETTER_AUTH_URL: baseURL,
+      MERCHANT_ALLOW_LOCAL_AUTH: 'true',
+      GITHUB_CLIENT_ID: 'fixture-client',
+      GITHUB_CLIENT_SECRET: 'fixture-client-secret-at-least-20',
+      MERCHANT_GITHUB_IDS: '123456789',
+    },
+  }, {
     command: 'npm run build && npm run start -- --hostname 127.0.0.1 --port 3100',
     url: baseURL,
     reuseExistingServer: false,
@@ -41,11 +56,11 @@ export default defineConfig({
       NEXT_PUBLIC_DEMO_ORDER_STORAGE: 'remote',
       NEXT_PUBLIC_COMMERCE_PUBLIC_KEY: '',
       NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY: '',
-      ORDERS_API_URL: 'http://127.0.0.1:4100',
+      ORDERS_API_URL: 'http://127.0.0.1:4101',
       ORDERS_ALLOW_LOCAL_API: 'true',
       ORDERS_API_SECRET: process.env.ORDERS_API_SECRET || 'local-orders-test-secret-at-least-32-characters',
       MERCHANT_AUTH_ENABLED: 'true',
       MERCHANT_AUTH_ORIGIN: baseURL,
     },
-  },
+  }],
 });

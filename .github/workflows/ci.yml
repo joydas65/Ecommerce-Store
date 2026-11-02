@@ -44,6 +44,7 @@ jobs:
       - run: npm run lint
       - run: npm run test:ci
       - run: node --test scripts/release/*.test.mjs
+      - run: node --test scripts/test/*.test.mjs
       - run: npx playwright install --with-deps chromium
       # Build demo purchase flows, then live-mode unavailable states, without merchant keys.
       - run: npm run test:e2e
@@ -51,7 +52,7 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: joydas65/Ecommerce-Orders
-          ref: 1b27badcac2b272c2ebe71838102262640e24b41
+          ref: 9501fc09a3002a9f9ccda4fba70fb7f0bde7481e
           path: .orders-service
           persist-credentials: false
       - name: Start real order persistence for browser checks
@@ -79,7 +80,7 @@ jobs:
         run: npm run test:e2e:persistent
       - name: Verify Stripe browser contract without payment credentials
         run: npm run test:e2e:stripe-contract
-      - name: Verify merchant authorization and order inbox with real database sessions
+      - name: Verify merchant access and audited payment recovery with real database sessions
         run: npm run test:e2e:merchant
         env:
           DATABASE_URL: postgres://orders_test:local-ci-only@127.0.0.1:5433/orders_test

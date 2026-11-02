@@ -6,7 +6,7 @@ A Next.js storefront with a sample catalog, persistent orders, and Stripe sandbo
 
 The portfolio direction is a polished, single-store commerce demo that shows the complete journey from a shopper placing an order to a merchant managing it. The goal is to demonstrate senior full-stack engineering through clear product decisions, reliable transactions, maintainable boundaries, and evidence from tests.
 
-**Current status:** the Next.js storefront and separate Node.js order service run on Vercel, with PostgreSQL persistence, private reloadable receipts, and recovery after a lost response. The Stripe test release adds hosted checkout, signed webhooks, and server-side payment reconciliation. GitHub CI, database migration checks, and deployed browser checks gate releases. The read-only merchant inbox adds approved-account GitHub sign-in, payment-status filters and order details. Real payments and merchant actions remain outside this scope; each deployment and its external OAuth flow require the release checks below.
+**Current status:** the Next.js storefront and separate Node.js order service run on Vercel, with PostgreSQL persistence, private reloadable receipts, and recovery after a lost response. The Stripe test release adds hosted checkout, signed webhooks, and server-side payment reconciliation. GitHub CI, database migration checks, and deployed browser checks gate releases. The merchant inbox adds approved-account GitHub sign-in, payment-status filters, order details, and audited Stripe test payment rechecks. Real payments and fulfillment actions remain outside this scope; each deployment and its external OAuth flow require the release checks below.
 
 The [Vercel release guide](docs/deployment.md) documents deployment checks, project configuration, release verification, and rollback recovery.
 
@@ -27,6 +27,7 @@ The [Vercel release guide](docs/deployment.md) documents deployment checks, proj
 - Visible service errors and retries, address restoration when going back, and protection against repeated in-flight payment submissions.
 - Checkout regression tests and production-browser smoke tests, with automated lint, test, and build checks.
 - Private merchant sign-in, payment-status filters, cursor pagination, order details, loading/retry states, and sign-out.
+- Merchant payment recovery using an existing Stripe test session, with durable retry keys, concurrent-webhook protection and an actor-attributed audit timeline.
 
 ## Foundation and architecture
 
@@ -157,7 +158,7 @@ For local development also set `ORDERS_ALLOW_LOCAL_API=true`, and match the back
 
 Open `/admin/orders` and sign in with an approved GitHub account. The inbox labels paid Stripe test orders separately from simulated purchases. Filter by paid, pending, canceled, review required or simulated; use **Older orders**, **Newer orders**, and refresh to navigate. Open an order to inspect products, quantities, shipping, tax, total, payment state and timestamps. URLs retain the selected filter and cursor. Missing orders, expired sessions and service failures have distinct recovery states.
 
-This version is read-only: no payment overrides, fulfillment or refunds. **Sign out** revokes the database session, so replaying its old cookie fails. Existing guest checkout and receipt ownership remain separate.
+For unresolved Stripe test orders with a saved payment session, **Recheck payment status** retrieves fresh provider evidence and records the outcome in **Payment check history**. After an ambiguous response, **Recover previous check** reuses the saved request even after a reload. A failed check never confirms payment. Fulfillment and refunds remain outside this workspace; see [the payment recovery decision](docs/decisions/0009-merchant-payment-recovery.md). **Sign out** revokes the database session, so replaying its old cookie fails. Existing guest checkout and receipt ownership remain separate.
 
 ### Optional legacy Commerce.js / Stripe integration
 
@@ -195,7 +196,7 @@ npm start
 | `npm run test:e2e:demo` | Run only the seeded purchase and recovery browser tests |
 | `npm run test:e2e:live` | Run only the live-mode checks with merchant keys deliberately absent |
 | `npm run test:e2e:persistent` | Run the demo suite plus real persistent purchase, receipt and recovery checks; requires the local Node service and PostgreSQL |
-| `npm run test:e2e:merchant` | Verify merchant access, real-database order browsing, pagination, recovery and sign-out against the local backend |
+| `npm run test:e2e:merchant` | Verify merchant access, order browsing, sign-out and audited Stripe recovery using real PostgreSQL and a guarded local provider fixture |
 | `npm run test:e2e:stripe-contract` | Verify Stripe checkout and receipt UI using browser contract fixtures, without payment credentials |
 | `npm run test:e2e:deployed` | Verify a public deployment using `E2E_BASE_URL`, `E2E_EXPECTED_COMMIT_SHA`, `E2E_MODE=stripe` for the hosted test provider, and explicit `E2E_MERCHANT_ENABLED=true` or `false` |
 
@@ -218,7 +219,7 @@ Playwright uses the real demo implementation to exercise shared searches, sortin
 
 [GitHub Actions](.github/workflows/ci.yml) runs lint, Jest, release-event validation, and production Playwright checks on pushes and pull requests. The [deployment workflow](.github/workflows/deployment-checks.yml) verifies the configured provider before native Deployment Checks permit production promotion. Its Stripe gate creates an unpaid sandbox session, checks receipt ownership and reloads, then cancels it without entering card details. Paid sandbox flows are verified separately; CI fixtures alone do not prove provider integration. Browser reports are retained as seven-day workflow artifacts. No production merchant or provider credentials are supplied to browser CI; see the [release guide](docs/deployment.md) for the external Vercel settings needed to enable the gate.
 
-The merchant browser suite uses `playwright.merchant.config.js` and a disposable local PostgreSQL database. Start the backend with the fixture environment in `.github/workflows/ci.yml`, then run `npm run test:e2e:merchant` with the same `DATABASE_URL` and `BETTER_AUTH_SECRET`. `E2E_ORDERS_SERVICE_DIR` can select the backend checkout; otherwise the suite uses `.orders-service` or the sibling `Ecommerce-Orders` directory. It builds a local remote-order storefront at `127.0.0.1:3100` and expects the backend at `127.0.0.1:4100`.
+The merchant browser suite uses `playwright.merchant.config.js` and a disposable local PostgreSQL database. Start the backend with the fixture environment in `.github/workflows/ci.yml`, then run `npm run test:e2e:merchant` with the same `DATABASE_URL` and `BETTER_AUTH_SECRET`. `E2E_ORDERS_SERVICE_DIR` can select the backend checkout; otherwise the suite uses `.orders-service` or the sibling `Ecommerce-Orders` directory. It builds a local remote-order storefront at `127.0.0.1:3100` and starts a guarded backend fixture on `127.0.0.1:4101`. That process uses the real Stripe SDK against an ephemeral loopback HTTP provider, with no payment credentials. Its fixture controls are never imported by production code.
 
 The backend's `scripts/test/seed-merchant-session.mjs` creates framework-signed local merchant, ordinary-user and expired-session fixtures. It requires explicit opt-in and refuses Vercel or remote databases. Fixture files are private temporary files and are removed after use. Authenticated traces and browser storage-state artifacts are disabled. These tests exercise real session validation and PostgreSQL; they do not automate GitHub consent or replace a real deployed OAuth verification.
 
@@ -232,13 +233,13 @@ Each milestone should leave a working, demonstrable application. Scope is one st
 | 1b. Reproducible purchasing demo | Implemented: seeded products, explicit simulation mode, simulated purchases, and controlled failure recovery | Provider interfaces, deterministic testing, integration design |
 | 1c. Vercel release foundation | Deployed: Git integration, previews, CI and deployed purchase gates, release identity, and recovery instructions | Deployment safety, least-privilege automation, verifiable releases |
 | 2. Complete shopper experience | Catalog branding, responsive cards, keyboard access, confirmed add feedback, directly linked product detail pages, and search/sorting with shareable URLs implemented | Product judgment, accessibility, frontend architecture |
-| 3. Full-stack order workflow | Persistent orders, quotes, private receipts and Stripe test checkout deployed; read-only merchant inbox implemented; stock reservations and merchant actions remain planned | Data modeling, authorization, concurrency, transaction boundaries |
+| 3. Full-stack order workflow | Persistent orders, quotes, private receipts and Stripe test checkout deployed; merchant inbox and audited payment recovery implemented; stock reservations and fulfillment remain planned | Data modeling, authorization, concurrency, transaction boundaries |
 | 4. Reliable operation | Duplicate-safe submissions, response-loss recovery, signed Stripe webhooks, payment reconciliation, and real database/browser tests implemented; broader monitoring remains planned | Failure handling, observability, security, operating a service |
 | 5. Interview presentation | Hosted demo and decision records available; a polished walkthrough, screenshots, and broader measured results remain planned | Explaining tradeoffs and supporting claims with evidence |
 
-### Next milestone: audited merchant actions
+### Next milestone: operational reliability
 
-After verifying the read-only inbox release, add bounded payment-reconciliation or fulfillment actions, an audit trail and concurrent-update protection. Keep payment and fulfillment states separate and test purchases clearly labeled. Real payments require a separate readiness review covering fulfillment, tax, refunds, disputes, and operational controls.
+Build on audited merchant recovery with automatic reconciliation, correlated operational telemetry, actionable alerts and a tested restore procedure. Keep payment and fulfillment states separate and test purchases clearly labeled. Real payments require a separate readiness review covering fulfillment, tax, refunds, disputes, and operational controls.
 
 ## Current limits
 
@@ -248,7 +249,7 @@ After verifying the read-only inbox release, add bounded payment-reconciliation 
 - Live shipping and tax amounts come from Commerce.js; demo totals use the documented sample rules.
 - Remote submissions are idempotent per guest and request key, and one quote can create only one order. Stripe reconciliation verifies the stored session; independent new quotes are independent purchases.
 - The direct Stripe adapter accepts test secret keys only. A functioning merchant account and additional operational work are needed for real catalog, payment, and fulfillment behavior. Broader monitoring remains future work.
-- Merchant login is restricted to the configured GitHub identities. There is no public admin signup, role-management UI, customer account system or cross-device guest receipt recovery. The inbox has no mutation actions or audit timeline yet.
+- Merchant login is restricted to the configured GitHub identities. There is no public admin signup, role-management UI, customer account system or cross-device guest receipt recovery. The only merchant payment action is a verified recheck of an existing Stripe test session; the audit timeline records these checks. Automatic reconciliation and fulfillment are not implemented.
 - Authentication rate limits use PostgreSQL and may share a conservative bucket behind the BFF; they are not guaranteed per-person or per-client-IP limits.
 - Free-plan quotas can pause the hosted order service. Production commercial use requires a plan review; the demo does not claim an availability SLA.
 - Planned features and metrics should be presented as completed only after implementation and verification.

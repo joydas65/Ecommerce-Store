@@ -99,6 +99,6 @@ export default function MerchantOrderInbox({ actions, signInHref = '/admin/sign-
             </nav>
           </div>
         </>}
-    <p className={styles.detailFootnote}>Payment statuses reflect the latest saved result. This workspace does not change payments or fulfillment.</p>
+    <p className={styles.detailFootnote}>Payment statuses reflect the latest saved result. Open an unresolved Stripe order to recheck its payment status and review merchant activity.</p>
   </MerchantWorkspace>;
 }

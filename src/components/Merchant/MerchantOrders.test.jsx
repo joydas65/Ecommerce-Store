@@ -25,11 +25,24 @@ const pending = { ...summary, id: secondId, reference: 'TEST-87654321', status: 
 const page = (orders = [summary], nextCursor = null) => ({ orders, pageInfo: { nextCursor, hasMore: nextCursor !== null } });
 const response = (data, status = 200) => ({ ok: status >= 200 && status < 300, status, json: async () => data });
 const originalFetch = globalThis.fetch;
+const emptyHistory = { eligibility: { eligible: false, reason: 'resolved', retryAt: null }, events: [], hasMore: false };
+
+function detailRequests(...results) {
+  const request = jest.fn().mockResolvedValue(response(receipt));
+  for (const result of results) {
+    if (typeof result === 'function') request.mockImplementationOnce(result);
+    else request.mockResolvedValueOnce(result);
+  }
+  fetch.mockImplementation((url, options) => url.endsWith('/payment-checks')
+    ? Promise.resolve(response(emptyHistory)) : request(url, options));
+  return request;
+}
 
 beforeEach(() => {
   globalThis.fetch = jest.fn();
   window.history.replaceState(null, '', '/admin/orders');
   mockPush.mockClear();
+  window.sessionStorage.clear();
 });
 afterAll(() => { globalThis.fetch = originalFetch; });
 
@@ -184,7 +197,7 @@ test('renders all five payment states without presenting simulation as a paid St
 });
 
 test('detail displays authoritative shipping, tax, totals, provider and timestamps without any write requests', async () => {
-  fetch.mockResolvedValue(response(receipt));
+  const orderRequests = detailRequests(response(receipt));
   render(<MerchantOrderDetail orderId={id} />);
   expect(screen.getByRole('status')).toHaveTextContent('Loading order details');
   expect(await screen.findByRole('heading', { name: 'Items & totals' })).toBeVisible();
@@ -197,25 +210,26 @@ test('detail displays authoritative shipping, tax, totals, provider and timestam
   expect(screen.getByText('Paid')).toBeVisible();
   expect(screen.getByText('Stripe test')).toBeVisible();
   expect(screen.getByText('Nov 1, 2026, 12:00 PM UTC')).toBeVisible();
-  expect(fetch).toHaveBeenCalledTimes(1);
+  expect(orderRequests).toHaveBeenCalledTimes(1);
   expect(fetch).toHaveBeenCalledWith(`/api/merchant/orders/${id}`, expect.objectContaining({ cache: 'no-store', credentials: 'same-origin' }));
   expect(screen.queryByRole('button', { name: /cancel|refund|fulfill|reconcile/i })).not.toBeInTheDocument();
 });
 
-test('pending detail is read-only and does not trigger payment reconciliation or cart updates', async () => {
-  fetch.mockResolvedValue(response({ ...receipt, status: 'PENDING_PAYMENT', paymentStatus: 'PENDING' }));
+test('opening a pending detail does not automatically recheck payments or change the cart', async () => {
+  const orderRequests = detailRequests(response({ ...receipt, status: 'PENDING_PAYMENT', paymentStatus: 'PENDING' }));
   render(<MerchantOrderDetail orderId={id} />);
   expect(await screen.findByText('Pending')).toBeVisible();
   expect(screen.getByText('Kept while this payment is unresolved.')).toBeVisible();
   expect(screen.getByText(/Payment has not been confirmed/)).toBeVisible();
-  expect(fetch).toHaveBeenCalledTimes(1);
+  expect(orderRequests).toHaveBeenCalledTimes(1);
+  expect(fetch.mock.calls.every(([, options]) => options.method !== 'POST')).toBe(true);
   expect(screen.queryByText('Paid')).not.toBeInTheDocument();
 });
 
 test.each([
   [401, 'Sign in to continue'], [403, 'Merchant access required'], [404, 'Order not found'], [503, 'Order details unavailable'],
 ])('detail handles HTTP %s without rendering private order data', async (status, title) => {
-  fetch.mockResolvedValue(response(receipt, status));
+  detailRequests(response(receipt, status));
   render(<MerchantOrderDetail orderId={id} />);
   expect(await screen.findByRole('heading', { name: title })).toBeVisible();
   expect(screen.queryByText(receipt.reference)).not.toBeInTheDocument();
@@ -224,14 +238,14 @@ test.each([
 test.each([
   { ...receipt, id: secondId }, { ...receipt, shippingCents: 0 }, { ...receipt, paymentMode: 'live' },
 ])('detail rejects unverified identity or pricing rather than displaying a paid state (%j)', async (value) => {
-  fetch.mockResolvedValue(response(value));
+  detailRequests(response(value));
   render(<MerchantOrderDetail orderId={id} />);
   expect(await screen.findByRole('heading', { name: 'Order details unavailable' })).toBeVisible();
   expect(screen.queryByText('Paid')).not.toBeInTheDocument();
 });
 
 test('detail retry loads a recovered record and unmount cancels its request', async () => {
-  fetch.mockResolvedValueOnce(response(null, 503)).mockResolvedValue(response(receipt));
+  detailRequests(response(null, 503), response(receipt));
   const view = render(<MerchantOrderDetail orderId={id} />);
   fireEvent.click(await screen.findByRole('button', { name: 'Retry' }));
   await screen.findByText(receipt.reference);
@@ -242,8 +256,7 @@ test('detail retry loads a recovered record and unmount cancels its request', as
 
 test('changing the detail route discards an in-flight previous order response', async () => {
   let resolveOld;
-  fetch.mockImplementationOnce(() => new Promise((resolve) => { resolveOld = resolve; }))
-    .mockResolvedValue(response({ ...receipt, id: secondId, reference: 'TEST-87654321' }));
+  detailRequests(() => new Promise((resolve) => { resolveOld = resolve; }), response({ ...receipt, id: secondId, reference: 'TEST-87654321' }));
   const view = render(<MerchantOrderDetail orderId={id} />);
   view.rerender(<MerchantOrderDetail orderId={secondId} />);
   expect(await screen.findByText('TEST-87654321')).toBeVisible();

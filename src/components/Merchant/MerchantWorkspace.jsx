@@ -7,7 +7,7 @@ export function MerchantWorkspace({ title, description, actions, children }) {
   return <main className={styles.workspace}>
     <div className={styles.topline}>
       <p className={styles.eyebrow}>Joy’s Store / Merchant workspace</p>
-      <div className={styles.access}><span className={styles.readonly}>Read-only access</span>{actions}</div>
+      <div className={styles.access}><span className={styles.accessBadge}>Merchant access</span>{actions}</div>
     </div>
     <h1 className={styles.heading}>{title}</h1>
     <p className={styles.intro}>{description}</p>

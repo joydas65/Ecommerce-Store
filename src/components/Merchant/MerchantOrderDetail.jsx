@@ -1,12 +1,14 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { Button } from '@mui/material';
 import { isSimulatedOrderReceipt, isStripeOrder } from '../../lib/orders/order-contract';
 import { MerchantLoading, MerchantRequestState, MerchantWorkspace, PaymentBadge } from './MerchantWorkspace';
 import { money, orderDate, paymentLabel, providerLabel } from './merchant-display';
 import styles from './Merchant.module.css';
+import MerchantPaymentChecks from './MerchantPaymentChecks';
+import useMerchantPaymentChecks from './useMerchantPaymentChecks';
 
 export default function MerchantOrderDetail({ orderId, actions, signInHref = '/admin/sign-in' }) {
   const [attempt, setAttempt] = useState(0);
@@ -14,6 +16,13 @@ export default function MerchantOrderDetail({ orderId, actions, signInHref = '/a
   const requestKey = `${orderId}:${attempt}`;
   const current = result?.key === requestKey ? result : { state: 'loading' };
   const order = current.order;
+  const onCheckOrder = useCallback((savedOrder) => {
+    setResult((previous) => previous?.key === requestKey && previous.state === 'ready' ? { ...previous, order: savedOrder } : previous);
+  }, [requestKey]);
+  const onAccessDenied = useCallback((state) => {
+    setResult({ key: requestKey, state });
+  }, [requestKey]);
+  const checks = useMerchantPaymentChecks({ orderId, revision: attempt, onOrder: onCheckOrder, onAccessDenied });
 
   useEffect(() => {
     const controller = new AbortController();
@@ -27,7 +36,8 @@ export default function MerchantOrderDetail({ orderId, actions, signInHref = '/a
         if (!response.ok) throw new Error('Merchant order is unavailable.');
         const data = await response.json();
         if (!isSimulatedOrderReceipt(data, orderId) && !isStripeOrder(data, orderId)) throw new Error('Order details could not be verified.');
-        if (active) setResult({ key: requestKey, state: 'ready', order: data });
+        if (active) setResult((previous) => previous?.key === requestKey && ['unauthorized', 'forbidden'].includes(previous.state)
+          ? previous : { key: requestKey, state: 'ready', order: data });
       } catch {
         if (active) setResult({ key: requestKey, state: 'error' });
       }
@@ -41,7 +51,7 @@ export default function MerchantOrderDetail({ orderId, actions, signInHref = '/a
   return <MerchantWorkspace title="Order details" description="The saved order, its payment result, and a complete breakdown of the purchase." actions={actions}>
     <div className={styles.toolbar}>
       <Link className={styles.back} href="/admin/orders">← Back to orders</Link>
-      <Button variant="outlined" disabled={current.state === 'loading'} onClick={() => setAttempt((value) => value + 1)}>Refresh order</Button>
+      <Button variant="outlined" disabled={current.state === 'loading' || checks.busy} onClick={() => setAttempt((value) => value + 1)}>Refresh order</Button>
     </div>
     {current.state === 'loading' ? <MerchantLoading detail />
       : current.state !== 'ready' ? <MerchantRequestState state={current.state} detail onRetry={() => setAttempt((value) => value + 1)} signInHref={signInHref} />
@@ -76,7 +86,8 @@ export default function MerchantOrderDetail({ orderId, actions, signInHref = '/a
               <p className={styles.statusDescription}>{paymentLabel(order).detail}</p>
             </section>
           </div>
-          <p className={styles.detailFootnote}>Read-only record. Payment and fulfillment actions are not available in this workspace.</p>
+          <MerchantPaymentChecks checks={checks} signInHref={signInHref} />
+          <p className={styles.detailFootnote}>Payment checks verify Stripe&apos;s saved checkout session. Refunds, manual payment changes, and fulfillment actions are not available here.</p>
         </>}
   </MerchantWorkspace>;
 }
