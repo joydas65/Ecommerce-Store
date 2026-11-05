@@ -1,6 +1,6 @@
 # 0010 — Google sign-in for shoppers and merchants
 
-Status as of 2026-11-05: production Google shopper sign-in, a signed-in test purchase, and shopper sign-out are verified. Existing GitHub merchant access is also verified after release. Merchant Google linking and subsequent sign-in still await owner confirmation at the linking step.
+Status as of 2026-11-05: production Google shopper sign-in, a signed-in test purchase, and shopper sign-out are verified. Existing GitHub merchant access, approved Google linking, fresh Google sign-in, merchant identity continuity and sign-out are also verified. Shopper and merchant sessions remained separate throughout.
 
 ## Context
 
@@ -43,7 +43,7 @@ Unit, PostgreSQL and browser tests cover forged/expired tokens, OAuth state/nonc
 
 Real Google shopper sign-in on the canonical storefront succeeded. A new signed-in Notebook purchase for $18.36 completed through Stripe sandbox checkout using its test card, appeared in **My orders**, and retained its private receipt after a full page reload. Historical guest orders were not imported. After shopper sign-out, opening that private account receipt redirected to `/account/sign-in`. Signing in again through Google restored the same paid order history. Shopper sign-out left the separate existing GitHub merchant session authorized. No real charge was made.
 
-The existing GitHub merchant login succeeded after release and displayed the new paid test order and **Connect Google** action. Merchant Google linking still awaits the owner's confirmation at that action; subsequent Google merchant sign-in and sign-out acceptance remain pending. Do not describe both Google authentication flows as fully accepted until those checks pass. Backend PostgreSQL verification previously passed 143 tests; lint, production builds, release-event and fixture-guard checks also passed.
+The existing GitHub merchant login succeeded after release and displayed the new paid test order and **Connect Google** action. With the owner's explicit approval, Google linking completed and the workspace showed **Google connected**. The authenticated session retained the same internal merchant identity and reported Google linked. After merchant sign-out revoked that session, fresh Google sign-in returned to `/admin/orders` with **Google connected**, the paid shopper test order and the same internal merchant identity. The customer-session endpoint still returned `AUTH_REQUIRED`, confirming that merchant sign-in did not sign the shopper in. Final merchant sign-out redirected to `/admin/sign-in`, and the merchant-session endpoint returned `AUTH_REQUIRED`, verifying revocation of the Google-created session. Backend PostgreSQL verification previously passed 143 tests; lint, production builds, release-event and fixture-guard checks also passed.
 
 ## Tradeoffs
 
