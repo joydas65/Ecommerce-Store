@@ -1,4 +1,5 @@
 import Providers from './providers';
+import { customerAccountsEnabled } from '../lib/customer/server';
 
 export const metadata = {
   title: { default: "Joy's Store", template: "%s | Joy's Store" },
@@ -6,5 +7,5 @@ export const metadata = {
 };
 
 export default function RootLayout({ children }) {
-  return <html lang="en"><body><Providers>{children}</Providers></body></html>;
+  return <html lang="en"><body><Providers customerAccountsEnabled={customerAccountsEnabled()}>{children}</Providers></body></html>;
 }

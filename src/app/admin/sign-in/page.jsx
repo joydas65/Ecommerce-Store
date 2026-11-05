@@ -8,7 +8,7 @@ export default async function SignInPage({ searchParams }) {
   let available = false;
   try { merchantConfig(); available = true; } catch { /* Show the environment's unavailable state. */ }
   const session = available ? await merchantSession((await headers()).get('cookie')) : { status: 503 };
-  if (session.status === 200) redirect('/admin/orders');
   const params = await searchParams;
-  return <MerchantSignIn available={available} failed={Boolean(params?.error)} forbidden={session.status === 403} />;
+  if (session.status === 200) redirect(params?.error ? '/admin/orders?authError=1' : '/admin/orders');
+  return <MerchantSignIn available={available} googleEnabled={process.env.MERCHANT_GOOGLE_ENABLED === 'true'} failed={Boolean(params?.error)} forbidden={session.status === 403} />;
 }

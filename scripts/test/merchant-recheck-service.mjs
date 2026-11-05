@@ -19,7 +19,11 @@ export function fixtureConfiguration(env = process.env) {
     || !['postgres:', 'postgresql:'].includes(database.protocol)
     || !['localhost', '127.0.0.1', '[::1]'].includes(database.hostname)
     || !database.pathname.slice(1) || env.BETTER_AUTH_URL !== storefrontOrigin
-    || env.MERCHANT_AUTH_ENABLED !== 'true' || env.MERCHANT_ALLOW_LOCAL_AUTH !== 'true') {
+    || env.MERCHANT_AUTH_ENABLED !== 'true' || env.MERCHANT_ALLOW_LOCAL_AUTH !== 'true'
+    || env.CUSTOMER_AUTH_URL !== storefrontOrigin || env.CUSTOMER_AUTH_ENABLED !== 'true'
+    || env.CUSTOMER_ALLOW_LOCAL_AUTH !== 'true' || env.CUSTOMER_TEST_FIXTURES !== 'true'
+    || env.MERCHANT_GOOGLE_ENABLED !== 'true' || env.GOOGLE_CLIENT_ID !== 'fixture-google.apps.googleusercontent.com'
+    || env.GOOGLE_CLIENT_SECRET !== 'fixture-google-secret-at-least-20') {
     throw new Error('Merchant recheck fixtures require explicit opt-in, local authentication, and disposable loopback PostgreSQL.');
   }
   const backendDirectory = path.resolve(env.E2E_ORDERS_SERVICE_DIR
@@ -89,10 +93,12 @@ export async function startFixtureService(env = process.env) {
   const { backendDirectory } = fixtureConfiguration(env);
   const backendImport = (file) => import(pathToFileURL(path.join(backendDirectory, file)).href);
   const [{ createHandler }, { createPool }, { migrate }, { OrderService }, { MerchantOrders },
-    { createMerchantAuth }, { createStripeGateway, stripeApiVersion }, { cleanupExpired }, { MerchantPaymentChecks }] = await Promise.all([
+    { createMerchantAuth }, { createStripeGateway, stripeApiVersion }, { cleanupExpired }, { MerchantPaymentChecks },
+    { createCustomerAuth }, { CustomerOrders }] = await Promise.all([
     backendImport('src/api.js'), backendImport('src/database.js'), backendImport('src/migrate.js'),
     backendImport('src/service.js'), backendImport('src/merchant-orders.js'), backendImport('src/merchant-auth.js'),
     backendImport('src/stripe-gateway.js'), backendImport('src/cleanup.js'), backendImport('src/merchant-payment-checks.js'),
+    backendImport('src/customer-auth.js'), backendImport('src/customer-orders.js'),
   ]);
   const requireBackend = createRequire(path.join(backendDirectory, 'package.json'));
   const Stripe = requireBackend('stripe');
@@ -132,9 +138,11 @@ export async function startFixtureService(env = process.env) {
     const stripeGateway = createStripeGateway({ stripeClient, storefrontOrigin, webhookSecret: 'whsec_localMerchantFixture' });
     const service = new OrderService(pool, { stripeGateway });
     const auth = createMerchantAuth({ pool, env });
+    const customerAuth = createCustomerAuth({ pool, env });
     const merchantOrders = new MerchantOrders(pool);
     const handler = createHandler({ service, merchantOrders, merchantPaymentChecks: new MerchantPaymentChecks(pool, { service }), merchantAuth: () => auth,
       authorizeMerchant: (request) => auth.authorize(request), secret: env.ORDERS_API_SECRET,
+      customerAuth: () => customerAuth, authorizeCustomer: (request) => customerAuth.authorize(request), customerOrders: new CustomerOrders(pool),
       cronSecret: 'local-merchant-fixture-cleanup-secret', cleanup: () => cleanupExpired(pool), logger: () => {} });
 
     async function seed(settings) {

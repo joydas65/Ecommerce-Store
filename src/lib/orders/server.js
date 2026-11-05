@@ -1,6 +1,7 @@
 import 'server-only';
 import { randomUUID } from 'node:crypto';
 import { usesPersistentOrders } from '../storefront-config';
+import { customerCookies } from '../customer/server';
 
 const cookieName = 'joys_order_guest';
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -61,6 +62,14 @@ export async function forwardOrderRequest(request, path, { createGuest = false, 
     const key = request.headers.get('idempotency-key');
     if (!uuid.test(key || '')) return error(400, 'INVALID_REQUEST', 'A valid checkout recovery key is required.');
     headers['idempotency-key'] = key;
+    if (process.env.CUSTOMER_AUTH_ENABLED === 'true') {
+      const rawCustomer = request.headers.get('cookie') || '';
+      const customer = customerCookies(rawCustomer);
+      if (!customer && /(?:^|;\s*)(?:__Secure-)?joys_customer\.session_token=/.test(rawCustomer)) {
+        return error(401, 'AUTH_REQUIRED', 'Your account session could not be verified. Sign in again before retrying this checkout.');
+      }
+      if (customer) headers.Cookie = customer;
+    }
   }
   let response;
   try {
@@ -69,7 +78,9 @@ export async function forwardOrderRequest(request, path, { createGuest = false, 
     const upstream = await fetchImpl(target.href, { method: request.method,
       headers: { ...headers, Authorization: `Bearer ${config.secret}` }, body,
       cache: 'no-store', redirect: 'error', signal: AbortSignal.timeout(15000) });
-    if (upstream.status >= 500 || [401, 403].includes(upstream.status)) {
+    if (upstream.status === 401 && headers.Cookie) {
+      response = error(401, 'AUTH_REQUIRED', 'Your account session has expired. Sign in again, then retry this checkout with the same saved submission.');
+    } else if (upstream.status >= 500 || [401, 403].includes(upstream.status)) {
       response = error(503, 'SERVICE_UNAVAILABLE', 'The order service is temporarily unavailable. Retry to recover the same order.');
     } else {
       const data = await upstream.json();

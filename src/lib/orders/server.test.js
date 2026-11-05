@@ -27,6 +27,42 @@ beforeEach(() => {
 });
 afterEach(() => { process.env = originalEnv; });
 
+test('new signed-in orders forward only shopper auth cookies alongside the private guest credential', async () => {
+  process.env.CUSTOMER_AUTH_ENABLED = 'true';
+  const customer = '__Secure-joys_customer.session_token=customer-signed';
+  const fetchImpl = jest.fn().mockResolvedValue(reply({ id: 'order_fixture' }, 201));
+  const req = request({ headers: { cookie: `joys_order_guest=${guest}; ${customer}; __Secure-joys_merchant.session_token=merchant; tracking=private`, 'idempotency-key': key } });
+  expect((await forwardOrderRequest(req, '/v1/orders', { fetchImpl })).status).toBe(201);
+  expect(fetchImpl.mock.calls[0][1].headers).toMatchObject({ Cookie: customer, 'x-guest-id': guest, Authorization: `Bearer ${secret}` });
+  expect(JSON.stringify(fetchImpl.mock.calls[0])).not.toContain('merchant');
+});
+
+test('receipt and quote requests do not gain shopper privileges', async () => {
+  process.env.CUSTOMER_AUTH_ENABLED = 'true';
+  const fetchImpl = jest.fn().mockResolvedValue(reply({ id: 'quote_fixture' }, 201));
+  const req = request({ headers: { cookie: `joys_order_guest=${guest}; __Secure-joys_customer.session_token=customer-signed` } });
+  await forwardOrderRequest(req, '/v1/checkout-quotes', { fetchImpl });
+  expect(fetchImpl.mock.calls[0][1].headers).not.toHaveProperty('Cookie');
+});
+
+test('expired shopper session requires sign-in without silently converting checkout to guest', async () => {
+  process.env.CUSTOMER_AUTH_ENABLED = 'true';
+  const fetchImpl = jest.fn().mockResolvedValue(reply({ error: { code: 'AUTH_REQUIRED' } }, 401));
+  const req = request({ headers: { cookie: `joys_order_guest=${guest}; __Secure-joys_customer.session_token=expired`, 'idempotency-key': key } });
+  const response = await forwardOrderRequest(req, '/v1/orders', { fetchImpl });
+  expect(response.status).toBe(401);
+  expect((await response.json()).error.code).toBe('AUTH_REQUIRED');
+  expect(fetchImpl).toHaveBeenCalledTimes(1);
+});
+
+test('ambiguous shopper session cookies never downgrade checkout to a guest purchase', async () => {
+  process.env.CUSTOMER_AUTH_ENABLED = 'true';
+  const fetchImpl = jest.fn();
+  const req = request({ headers: { cookie: `joys_order_guest=${guest}; joys_customer.session_token=one; joys_customer.session_token=two`, 'idempotency-key': key } });
+  expect((await forwardOrderRequest(req, '/v1/orders', { fetchImpl })).status).toBe(401);
+  expect(fetchImpl).not.toHaveBeenCalled();
+});
+
 test('disabled persistent mode never contacts the order service', async () => {
   mockPersistentMode = false;
   const fetchImpl = jest.fn();

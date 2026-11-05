@@ -52,7 +52,7 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: joydas65/Ecommerce-Orders
-          ref: 9501fc09a3002a9f9ccda4fba70fb7f0bde7481e
+          ref: 0913b67c67caeed79fdf6515c97fdfeda9dee206
           path: .orders-service
           persist-credentials: false
       - name: Start real order persistence for browser checks
@@ -80,7 +80,7 @@ jobs:
         run: npm run test:e2e:persistent
       - name: Verify Stripe browser contract without payment credentials
         run: npm run test:e2e:stripe-contract
-      - name: Verify merchant access and audited payment recovery with real database sessions
+      - name: Verify merchant recovery and Google customer accounts with real database sessions
         run: npm run test:e2e:merchant
         env:
           DATABASE_URL: postgres://orders_test:local-ci-only@127.0.0.1:5433/orders_test

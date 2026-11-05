@@ -21,7 +21,7 @@ const htmlReporter = ['html', { open: 'never', outputFolder: `playwright-report/
 const testMatch = mode === 'live' ? ['foundation.spec.js'] : mode === 'stripe'
   ? [deployedURL ? 'stripe-deployment.spec.js' : 'stripe-contract.spec.js']
   : ['demo.spec.js', 'deployment.spec.js', 'catalog.spec.js', 'product.spec.js', 'discovery.spec.js', ...(persistentOrders ? ['persistent-orders.spec.js'] : [])];
-if (deployedURL) testMatch.push('merchant-deployment.spec.js');
+if (deployedURL) testMatch.push('merchant-deployment.spec.js', 'customer-deployment.spec.js');
 
 export default defineConfig({
   testDir: './e2e',

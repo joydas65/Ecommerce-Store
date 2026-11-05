@@ -23,6 +23,39 @@ test('merchant config requires explicit enabling and bounded fixed origins', () 
   expect(() => merchantConfig({ ...local, VERCEL: '1' })).toThrow();
 });
 
+test('enabled Google sign-in forwards its exact provider and only accepts its authorization URL', async () => {
+  const input = { ...body, provider: 'google' };
+  const options = { env: { ...env, MERCHANT_GOOGLE_ENABLED: 'true' }, fetchImpl: jest.fn().mockResolvedValue(reply({ url: 'https://accounts.google.com/o/oauth2/v2/auth?state=fixture' })) };
+  const response = await forwardMerchantAuth(request('/api/auth/sign-in/social', { method: 'POST', data: input }), 'sign-in/social', options);
+  expect(response.status).toBe(200);
+  expect(JSON.parse(options.fetchImpl.mock.calls[0][1].body)).toEqual(input);
+  options.fetchImpl.mockResolvedValue(reply({ url: 'https://github.com/login/oauth/authorize?state=fixture' }));
+  expect((await forwardMerchantAuth(request('/api/auth/sign-in/social', { method: 'POST', data: input }), 'sign-in/social', options)).status).toBe(503);
+});
+
+test('Google linking needs a merchant cookie and never forwards shopper credentials', async () => {
+  const input = { ...body, provider: 'google' };
+  const fetchImpl = jest.fn().mockResolvedValue(reply({ url: 'https://accounts.google.com/o/oauth2/v2/auth?state=fixture' }));
+  const options = { env: { ...env, MERCHANT_GOOGLE_ENABLED: 'true' }, fetchImpl };
+  const shopper = '__Secure-joys_customer.session_token=customer';
+  const denied = await forwardMerchantAuth(request('/api/auth/link-social', { method: 'POST', data: input, headers: { Cookie: shopper } }), 'link-social', options);
+  expect(denied.status).toBe(401);
+  expect(fetchImpl).not.toHaveBeenCalled();
+  const accepted = await forwardMerchantAuth(request('/api/auth/link-social', { method: 'POST', data: input, headers: { Cookie: `${shopper}; ${cookie}` } }), 'link-social', options);
+  expect(accepted.status).toBe(200);
+  expect(fetchImpl.mock.calls[0][1].headers.Cookie).toBe(cookie);
+  expect((await forwardMerchantAuth(request('/api/auth/link-social', { method: 'POST', data: input, headers: { 'Sec-Fetch-Site': 'same-site' } }), 'link-social', options)).status).toBe(403);
+  expect((await forwardMerchantAuth(request('/api/auth/link-social', { method: 'POST', data: body }), 'link-social', options)).status).toBe(400);
+});
+
+test('Google callback is opt-in and preserves only a fixed merchant return location', async () => {
+  const fetchImpl = jest.fn().mockResolvedValue(new Response(null, { status: 302, headers: { Location: `${env.MERCHANT_AUTH_ORIGIN}/admin/orders` } }));
+  const req = request('/api/auth/callback/google?code=fixture&state=fixture');
+  expect((await forwardMerchantAuth(req, 'callback/google', { env, fetchImpl })).status).toBe(404);
+  expect(fetchImpl).not.toHaveBeenCalled();
+  expect((await forwardMerchantAuth(req, 'callback/google', { env: { ...env, MERCHANT_GOOGLE_ENABLED: 'true' }, fetchImpl })).status).toBe(302);
+});
+
 test('forwards only merchant cookies and rejects ambiguous or oversized cookie input', () => {
   expect(merchantCookies(`joys_order_guest=private; ${cookie}; tracking=private`)).toBe(cookie);
   expect(merchantCookies('joys_merchant.oauth_state=abc; joys_merchant.session_token=def')).toBe('joys_merchant.oauth_state=abc; joys_merchant.session_token=def');

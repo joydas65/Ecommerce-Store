@@ -33,6 +33,7 @@ These GitHub repository **variables** are configured. They are identifiers rathe
 | `DEMO_ORDER_STORAGE` | `remote` for production; previews use `local` |
 | `PAYMENT_PROVIDER` | `stripe` for production; previews use simulation |
 | `MERCHANT_AUTH_ENABLED` | `true` for the merchant production release; previews use `false` |
+| `CUSTOMER_AUTH_ENABLED` | `false` until Google OAuth setup and release approval; must match the deployed customer feature flag |
 
 The Vercel project is connected to this GitHub repository with repository dispatch events enabled and production domain auto-assignment on. Native Deployment Checks require both of these GitHub checks for **production**:
 
@@ -141,6 +142,22 @@ The browser retains its request UUID in session storage after an ambiguous resul
 
 The audit endpoint exposes only a bounded recent history and indicates when more events exist. Audit data includes merchant identity snapshots and is private. Application append-only events do not provide database-owner tamper resistance. Code rollback leaves additive schema and recorded checks intact; verify schema compatibility before rolling back.
 
+## Google accounts
+
+Status: implemented and locally verified; Google Cloud project/client registration and real deployed sign-in are pending approval. Follow [ADR 0010](decisions/0010-google-accounts.md) for the identity and ownership boundaries.
+
+1. Create a dedicated Google OAuth project/client for Joy's Store, with no billing account or paid services. Configure only basic OpenID identity, email and profile scopes. Register the exact callbacks `https://joys-store.vercel.app/api/customer-auth/callback/google` and `https://joys-store.vercel.app/api/auth/callback/google`. Do not reuse production callbacks in previews or register wildcard callbacks.
+2. Deploy the compatible backend and additive migrations `006_customer_accounts.sql` and `007_single_merchant_google.sql` through its gates. Configure backend-only `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `CUSTOMER_AUTH_SECRET` (random and independent of merchant/service secrets), `CUSTOMER_AUTH_URL=https://joys-store.vercel.app`, `CUSTOMER_AUTH_ENABLED=true` and `MERCHANT_GOOGLE_ENABLED=true`. Existing GitHub OAuth and its allowlist remain configured.
+3. Keep storefront order storage `remote`. Set production `CUSTOMER_AUTH_ENABLED=true`, `CUSTOMER_AUTH_ORIGIN=https://joys-store.vercel.app`, and `MERCHANT_GOOGLE_ENABLED=true`. The storefront receives no OAuth or session secrets. Set the GitHub repository variable `CUSTOMER_AUTH_ENABLED=true` to match the deployed browser gate. Previews keep both new enable flags false.
+4. Pin the reviewed backend revision in CI and activate with a fresh storefront commit so the tested build includes the Account navigation. Wait for the existing CI and deployed-browser gates. A same-SHA rebuild needs explicit staged-deployment verification as described below.
+5. Verify real Google shopper sign-in, a new sandbox purchase appearing in My orders, private receipt reload, and sign-out. Sign in to the merchant workspace with GitHub, choose **Connect Google**, complete consent, then sign out and sign in with the linked Google account. The internal merchant/audit identity must remain unchanged. An unlinked Google account cannot enter the merchant workspace.
+
+The Google client must be configured for the intended audience. Testing mode may restrict which people can authenticate; complete Google's applicable publishing requirements before advertising public shopper sign-in. Google consent/account verification can require the account owner's interaction.
+
+Customer receipts are read-only from My orders. Orders remain available for the existing 30-day retention period after resolution, with unresolved Stripe orders retained. Switching accounts while recovering an in-flight checkout does not transfer its ownership; return to the original account and reuse the saved submission key. Logging out revokes the selected auth session; it does not delete local cart or guest receipt cookies.
+
+Local browser checks use guarded, disposable PostgreSQL identities and dummy Google credentials. No production identity or token enters CI. These tests cover OAuth initiation; real external consent/callback verification is a separate release step. Rollback can disable the feature flags while preserving customer identities and additive schema; never drop customer tables during a code rollback.
+
 ## Inspect a release
 
 Use an authenticated Vercel CLI linked to the intended project:
@@ -157,11 +174,12 @@ E2E_BASE_URL=https://<deployment-host>.vercel.app \
 E2E_EXPECTED_COMMIT_SHA=<full-commit-sha> \
 E2E_MODE=stripe \
 E2E_MERCHANT_ENABLED=true \
+E2E_CUSTOMER_ENABLED=false \
 E2E_ORDER_STORAGE=remote \
 npm run test:e2e:deployed
 ```
 
-The suite starts no local server. Set `E2E_MERCHANT_ENABLED=true` for a configured production inbox or `false` for a disabled environment; omitting it fails the gate. Merchant deployed checks verify sign-in navigation, noindex/no-store behavior and denial of anonymous or spoofed-identity API reads. They never sign in, call GitHub or acquire auth cookies. Stripe mode checks the health revision and capabilities, product routes and assets, a real unpaid sandbox session, private receipt reload, and cancellation without clearing the cart. Use `E2E_MODE=demo` for a simulated deployment; that suite also covers completed purchases, controlled failures, keyboard access, and cross-tab cart synchronization. Reports are written to `playwright-report/deployed` and `test-results/deployed`. A paid sandbox checkout must be verified separately with test card `4242 4242 4242 4242`, a future expiry, and a three-digit CVC.
+The suite starts no local server. Set `E2E_MERCHANT_ENABLED=true` for a configured production inbox or `false` for a disabled environment; omitting it fails the gate. Set `E2E_CUSTOMER_ENABLED` explicitly as well. Customer checks verify account navigation, noindex/no-store and anonymous or spoofed-identity denial without contacting Google. Merchant deployed checks verify sign-in navigation, noindex/no-store behavior and denial of anonymous or spoofed-identity API reads. They never sign in, call GitHub or acquire auth cookies. Stripe mode checks the health revision and capabilities, product routes and assets, a real unpaid sandbox session, private receipt reload, and cancellation without clearing the cart. Use `E2E_MODE=demo` for a simulated deployment; that suite also covers completed purchases, controlled failures, keyboard access, and cross-tab cart synchronization. Reports are written to `playwright-report/deployed` and `test-results/deployed`. A paid sandbox checkout must be verified separately with test card `4242 4242 4242 4242`, a future expiry, and a three-digit CVC.
 
 ## Roll back and resume
 

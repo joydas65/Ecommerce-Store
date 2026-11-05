@@ -9,12 +9,12 @@ import { CommerceProvider, useCommerce } from '../context/CommerceContext';
 import { usesSimulatedPayment, usesHostedStripe } from '../lib/storefront-config';
 import theme from './store-theme';
 
-function StoreShell({ children }) {
+function StoreShell({ children, customerAccountsEnabled }) {
   const { cart, cartActionError } = useCommerce();
   return (
     <>
       <Box component="a" href="#main-content" sx={{ position: 'fixed', top: -80, left: 16, zIndex: 1500, px: 2, py: 1.5, bgcolor: 'primary.main', color: 'primary.contrastText', borderRadius: 1, '&:focus': { top: 12 } }}>Skip to content</Box>
-      <Navbar totalItems={cart.total_items || 0} />
+      <Navbar totalItems={cart.total_items || 0} customerAccountsEnabled={customerAccountsEnabled} />
       {(usesSimulatedPayment || usesHostedStripe) && (
         <Box sx={{ borderBottom: '1px solid', borderColor: 'divider', bgcolor: '#eef1e9' }}>
           <Box role="note" sx={{ maxWidth: 1280, mx: 'auto', px: { xs: 2, sm: 4 }, py: 1.25, fontSize: 12, lineHeight: 1.6, color: 'text.secondary' }}>
@@ -29,7 +29,7 @@ function StoreShell({ children }) {
   );
 }
 
-export default function Providers({ children }) {
+export default function Providers({ children, customerAccountsEnabled = false }) {
   const merchant = usePathname()?.startsWith('/admin');
   return (
     <AppRouterCacheProvider>
@@ -44,7 +44,7 @@ export default function Providers({ children }) {
             </Box>
           </Box>
           <Box id="main-content" tabIndex={-1}>{children}</Box>
-        </> : <CommerceProvider><StoreShell>{children}</StoreShell></CommerceProvider>}
+        </> : <CommerceProvider><StoreShell customerAccountsEnabled={customerAccountsEnabled}>{children}</StoreShell></CommerceProvider>}
       </ThemeProvider>
     </AppRouterCacheProvider>
   );

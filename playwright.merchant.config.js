@@ -10,7 +10,7 @@ const baseURL = 'http://127.0.0.1:3100';
 
 export default defineConfig({
   testDir: './e2e',
-  testMatch: ['merchant.spec.js', 'merchant-payment-checks.spec.js'],
+  testMatch: ['merchant.spec.js', 'merchant-payment-checks.spec.js', 'customer-accounts.spec.js'],
   outputDir: 'test-results/merchant',
   fullyParallel: false,
   workers: 1,
@@ -38,6 +38,14 @@ export default defineConfig({
       MERCHANT_AUTH_ENABLED: 'true',
       BETTER_AUTH_URL: baseURL,
       MERCHANT_ALLOW_LOCAL_AUTH: 'true',
+      MERCHANT_GOOGLE_ENABLED: 'true',
+      CUSTOMER_AUTH_ENABLED: 'true',
+      CUSTOMER_AUTH_URL: baseURL,
+      CUSTOMER_ALLOW_LOCAL_AUTH: 'true',
+      CUSTOMER_TEST_FIXTURES: 'true',
+      CUSTOMER_AUTH_SECRET: process.env.CUSTOMER_AUTH_SECRET || 'local-customer-signing-secret-at-least-32-characters',
+      GOOGLE_CLIENT_ID: 'fixture-google.apps.googleusercontent.com',
+      GOOGLE_CLIENT_SECRET: 'fixture-google-secret-at-least-20',
       GITHUB_CLIENT_ID: 'fixture-client',
       GITHUB_CLIENT_SECRET: 'fixture-client-secret-at-least-20',
       MERCHANT_GITHUB_IDS: '123456789',
@@ -61,6 +69,9 @@ export default defineConfig({
       ORDERS_API_SECRET: process.env.ORDERS_API_SECRET || 'local-orders-test-secret-at-least-32-characters',
       MERCHANT_AUTH_ENABLED: 'true',
       MERCHANT_AUTH_ORIGIN: baseURL,
+      MERCHANT_GOOGLE_ENABLED: 'true',
+      CUSTOMER_AUTH_ENABLED: 'true',
+      CUSTOMER_AUTH_ORIGIN: baseURL,
     },
   }],
 });

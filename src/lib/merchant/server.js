@@ -1,4 +1,5 @@
 import 'server-only';
+import { merchantProviderUrl } from './provider-url';
 
 const cookiePrefix = /^(?:__Secure-)?joys_merchant\.[A-Za-z0-9_.-]+$/;
 const privateHeaders = { 'Cache-Control': 'private, no-store', Vary: 'Cookie', 'X-Content-Type-Options': 'nosniff', 'Referrer-Policy': 'no-referrer' };
@@ -129,7 +130,7 @@ export async function forwardMerchantPaymentCheck(request, orderId, { fetchImpl 
   } catch { return merchantError(503); }
 }
 
-const authMethods = { 'ok': 'GET', 'callback/github': 'GET', 'sign-in/social': 'POST', 'sign-out': 'POST' };
+const authMethods = { 'ok': 'GET', 'callback/github': 'GET', 'callback/google': 'GET', 'sign-in/social': 'POST', 'link-social': 'POST', 'sign-out': 'POST' };
 
 function validReturnLocation(location, origin) {
   try {
@@ -143,19 +144,25 @@ export async function forwardMerchantAuth(request, endpoint, { fetchImpl = globa
   if (authMethods[endpoint] !== request.method) return merchantError(405);
   let config;
   try { config = merchantConfig(env); } catch { return merchantError(503); }
+  const googleEnabled = env.MERCHANT_GOOGLE_ENABLED === 'true';
+  if (!googleEnabled && ['callback/google', 'link-social'].includes(endpoint)) return merchantError(404);
   const url = new URL(request.url);
-  if (url.search.length > 8192 || (endpoint !== 'callback/github' && url.search)) return merchantError(400);
+  if (url.search.length > 8192 || (!endpoint.startsWith('callback/') && url.search)) return merchantError(400);
   const headers = { Cookie: merchantCookies(request.headers.get('cookie')) };
   let body;
+  let provider;
   if (request.method === 'POST') {
-    if (request.headers.get('origin') !== config.origin || request.headers.get('sec-fetch-site') === 'cross-site') return merchantError(403);
+    if (request.headers.get('origin') !== config.origin || ['same-site', 'cross-site'].includes(request.headers.get('sec-fetch-site'))) return merchantError(403);
     if (!request.headers.get('content-type')?.toLowerCase().startsWith('application/json')) return merchantError(400);
     let input;
     try { input = await jsonWithinLimit(request, 16384); } catch { return merchantError(400); }
     if (!input || typeof input !== 'object' || Array.isArray(input)) return merchantError(400);
-    if (endpoint === 'sign-in/social') {
-      if (Object.keys(input).sort().join(',') !== 'callbackURL,errorCallbackURL,provider' || input.provider !== 'github'
+    if (endpoint === 'sign-in/social' || endpoint === 'link-social') {
+      if (Object.keys(input).sort().join(',') !== 'callbackURL,errorCallbackURL,provider' || !['github', ...(googleEnabled ? ['google'] : [])].includes(input.provider)
         || input.callbackURL !== '/admin/orders' || input.errorCallbackURL !== '/admin/sign-in') return merchantError(400);
+      provider = input.provider;
+      if (endpoint === 'link-social' && provider !== 'google') return merchantError(400);
+      if (endpoint === 'link-social' && !headers.Cookie) return merchantError(401);
     } else if (Object.keys(input).length) return merchantError(400);
     body = JSON.stringify(input);
     headers['Content-Type'] = 'application/json';
@@ -172,10 +179,10 @@ export async function forwardMerchantAuth(request, endpoint, { fetchImpl = globa
       response = new Response(null, { status: upstream.status, headers: { ...privateHeaders, Location: location } });
     } else if (upstream.status === 200) {
       const data = await jsonWithinLimit(upstream, 16384);
-      if (endpoint === 'sign-in/social') {
-        const target = new URL(data.url);
-        if (target.origin !== 'https://github.com' || target.pathname !== '/login/oauth/authorize' || target.username || target.password) return merchantError(503);
-        response = Response.json({ url: target.href }, { headers: privateHeaders });
+      if (endpoint === 'sign-in/social' || endpoint === 'link-social') {
+        const target = merchantProviderUrl(data.url, provider);
+        if (!target) return merchantError(503);
+        response = Response.json({ url: target }, { headers: privateHeaders });
       } else response = Response.json({ success: true }, { headers: privateHeaders });
     } else response = merchantError([400, 401, 403, 429].includes(upstream.status) ? upstream.status : 503);
     for (const cookie of upstream.headers.getSetCookie()) {
