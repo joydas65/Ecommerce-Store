@@ -50,6 +50,7 @@ export default function CustomerSignIn({ available, failed = false }) {
         </Button>
       </>}
       <p className={styles.footnote}>Guest checkout is always available. Earlier guest purchases stay with the browser used at checkout and are not added to your account.</p>
+      <p className={styles.footnote}>Read our <Link href="/privacy">privacy information</Link> before signing in.</p>
     </section>
     <Button component={Link} href="/" sx={{ mt: 2 }}>Continue shopping</Button>
   </main>;

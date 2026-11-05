@@ -43,6 +43,12 @@ test('disabled account environments preserve guest checkout without a broken Goo
   expect(screen.getByRole('link', { name: 'Continue shopping' })).toHaveAttribute('href', '/');
 });
 
+test.each([true, false])('privacy information is available before sign-in when accounts are enabled: %s', (available) => {
+  render(<CustomerSignIn available={available} />);
+  expect(screen.getByRole('link', { name: 'privacy information' })).toHaveAttribute('href', '/privacy');
+  expect(fetch).not.toHaveBeenCalled();
+});
+
 test('Google sign-in uses a fixed customer-only callback and safe retry messaging', async () => {
   fetch.mockResolvedValue(response({ providerError: 'private-token' }, 503));
   render(<CustomerSignIn available failed />);
