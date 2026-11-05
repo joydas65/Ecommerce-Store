@@ -52,7 +52,7 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: joydas65/Ecommerce-Orders
-          ref: 0913b67c67caeed79fdf6515c97fdfeda9dee206
+          ref: 10bdc21df7fa3a81b175117cbf658858838b9f0e
           path: .orders-service
           persist-credentials: false
       - name: Start real order persistence for browser checks
