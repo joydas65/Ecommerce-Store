@@ -6,7 +6,7 @@ A Next.js storefront with a sample catalog, persistent orders, and Stripe sandbo
 
 The portfolio direction is a polished, single-store commerce demo that shows the complete journey from a shopper placing an order to a merchant managing it. The goal is to demonstrate senior full-stack engineering through clear product decisions, reliable transactions, maintainable boundaries, and evidence from tests.
 
-**Current status:** the Next.js storefront and separate Node.js order service run on Vercel, with PostgreSQL persistence, private reloadable receipts, and recovery after a lost response. The Stripe test release adds hosted checkout, signed webhooks, and server-side payment reconciliation. GitHub CI, database migration checks, and deployed browser checks gate releases. The merchant inbox adds approved-account GitHub sign-in, payment-status filters, order details, and audited Stripe test payment rechecks. Google shopper accounts, private My orders, and explicit merchant Google linking are implemented; external Google setup and deployed OAuth verification remain pending. Real payments and fulfillment actions remain outside this scope; each deployment and its external OAuth flow require the release checks below.
+**Current status:** the Next.js storefront and separate Node.js order service run on Vercel, with PostgreSQL persistence, private reloadable receipts, and recovery after a lost response. The Stripe test release adds hosted checkout, signed webhooks, and server-side payment reconciliation. GitHub CI, database migration checks, and deployed browser checks gate releases. The merchant inbox adds approved-account GitHub sign-in, payment-status filters, order details, and audited Stripe test payment rechecks. Google shopper sign-in, a new paid sandbox purchase in My orders, private receipt reload, sign-out and returning sign-in were verified on 5 November 2026. Explicit merchant Google linking is deployed; its real linking and subsequent Google login acceptance remain pending owner confirmation. Real payments and fulfillment actions remain outside this scope.
 
 The [Vercel release guide](docs/deployment.md) documents deployment checks, project configuration, release verification, and rollback recovery.
 
@@ -28,6 +28,7 @@ The [Vercel release guide](docs/deployment.md) documents deployment checks, proj
 - Checkout regression tests and production-browser smoke tests, with automated lint, test, and build checks.
 - Private merchant sign-in, payment-status filters, cursor pagination, order details, loading/retry states, and sign-out.
 - Merchant payment recovery using an existing Stripe test session, with durable retry keys, concurrent-webhook protection and an actor-attributed audit timeline.
+- Optional Google shopper sign-in, private My orders and account receipts for new signed-in purchases, with separate merchant authorization and public [privacy information](https://joys-store.vercel.app/privacy).
 
 ## Foundation and architecture
 
@@ -75,7 +76,7 @@ The demo uses integer cents, $5 standard or $12 express shipping, and a clearly 
 
 The merchant workspace at `/admin/orders` uses a separate authentication boundary. GitHub OAuth and Better Auth run in the Node backend; PostgreSQL owns merchant identities and eight-hour sessions. Only explicitly allowlisted immutable GitHub account IDs are admitted, both before account creation and on every protected request. Optional Google sign-in requires explicit linking through an already authorized merchant and preserves that same internal identity; matching emails never link accounts automatically. The Next.js BFF forwards only merchant authentication cookies; neither a guest cookie nor the checkout service secret grants merchant access. Merchant pages are dynamic, uncached and marked noindex. See [the merchant inbox decision](docs/decisions/0008-merchant-order-inbox.md).
 
-Merchant authentication stores profile names/emails and encrypted provider credentials in separate auth tables. Those details never enter order receipts or the merchant order API. The statements above about guest checkout data apply to order creation, not merchant authentication.
+Merchant authentication stores profile names/emails and provider token records in separate auth tables; stored OAuth access and refresh tokens are encrypted. Those details never enter order receipts or the merchant order API. The statements above about guest checkout data apply to order creation, not merchant authentication.
 
 The SDK’s Axios dependency is pinned to the patched 0.34.0 release through a scoped override. Contract tests cover the request and response shapes used by this app.
 
@@ -145,7 +146,11 @@ The production configuration selects `seeded/stripe/remote`; local defaults and 
 
 ### Optional Google shopper accounts
 
-Google sign-in, **My orders**, and private receipt detail pages are implemented for remote order storage. Guest checkout remains available. New purchases created while signed in belong to that customer; signing in never imports old guest purchases automatically. Merchant and shopper sessions are separate, and shopper sign-in grants no merchant access.
+Google sign-in, **My orders**, and private receipt detail pages are enabled on the [live demo](https://joys-store.vercel.app/account/sign-in). Guest checkout remains available. New purchases created while signed in belong to that customer; signing in never imports old guest purchases automatically. Merchant and shopper sessions are separate, and shopper sign-in grants no merchant access.
+
+On 5 November 2026, real Google shopper sign-in, a new $18.36 Stripe sandbox purchase, My orders, a full private receipt reload, and sign-out followed by denied receipt access passed. Signing in again restored the same account order history. The release passed **653 unit tests, 99 local browser tests and eight deployed browser tests**. See the [release evidence](docs/deployment.md#google-accounts) for exact commits and workflow runs. Merchant Google linking and subsequent Google login still await owner confirmation and their separate live acceptance check.
+
+![Private Google account receipt showing a paid Stripe test purchase](docs/images/google-account-receipt.png)
 
 After configuring the backend Google OAuth client and independent customer secret, set server-only `CUSTOMER_AUTH_ENABLED=true` and `CUSTOMER_AUTH_ORIGIN` to the fixed storefront origin. Use `NEXT_PUBLIC_ORDER_STORAGE=remote`. Google credentials stay only in Ecommerce-Orders. Leave accounts disabled on previews and local credential-free demos. See [the Google accounts decision](docs/decisions/0010-google-accounts.md) and [release setup](docs/deployment.md#google-accounts).
 
@@ -204,7 +209,7 @@ npm start
 | `npm run test:e2e:persistent` | Run the demo suite plus real persistent purchase, receipt and recovery checks; requires the local Node service and PostgreSQL |
 | `npm run test:e2e:merchant` | Verify merchant access, order browsing, sign-out and audited Stripe recovery using real PostgreSQL and a guarded local provider fixture |
 | `npm run test:e2e:stripe-contract` | Verify Stripe checkout and receipt UI using browser contract fixtures, without payment credentials |
-| `npm run test:e2e:deployed` | Verify a public deployment using `E2E_BASE_URL`, `E2E_EXPECTED_COMMIT_SHA`, `E2E_MODE=stripe` for the hosted test provider, and explicit `E2E_MERCHANT_ENABLED=true` or `false` |
+| `npm run test:e2e:deployed` | Verify a public deployment using `E2E_BASE_URL`, `E2E_EXPECTED_COMMIT_SHA`, `E2E_MODE=stripe` for the hosted test provider, and explicit `E2E_MERCHANT_ENABLED` and `E2E_CUSTOMER_ENABLED` booleans |
 
 Install Playwright's browser before the first browser-test run:
 
@@ -239,7 +244,7 @@ Each milestone should leave a working, demonstrable application. Scope is one st
 | 1b. Reproducible purchasing demo | Implemented: seeded products, explicit simulation mode, simulated purchases, and controlled failure recovery | Provider interfaces, deterministic testing, integration design |
 | 1c. Vercel release foundation | Deployed: Git integration, previews, CI and deployed purchase gates, release identity, and recovery instructions | Deployment safety, least-privilege automation, verifiable releases |
 | 2. Complete shopper experience | Catalog branding, responsive cards, keyboard access, confirmed add feedback, directly linked product detail pages, and search/sorting with shareable URLs implemented | Product judgment, accessibility, frontend architecture |
-| 3. Full-stack order workflow | Persistent orders, quotes, private receipts and Stripe test checkout deployed; merchant inbox and audited payment recovery implemented; stock reservations and fulfillment remain planned | Data modeling, authorization, concurrency, transaction boundaries |
+| 3. Full-stack order workflow | Persistent orders, quotes, Google shopper accounts, private receipts and Stripe test checkout deployed; merchant inbox and audited payment recovery implemented; stock reservations and fulfillment remain planned | Data modeling, authorization, concurrency, transaction boundaries |
 | 4. Reliable operation | Duplicate-safe submissions, response-loss recovery, signed Stripe webhooks, payment reconciliation, and real database/browser tests implemented; broader monitoring remains planned | Failure handling, observability, security, operating a service |
 | 5. Interview presentation | Hosted demo and decision records available; a polished walkthrough, screenshots, and broader measured results remain planned | Explaining tradeoffs and supporting claims with evidence |
 
@@ -250,8 +255,8 @@ Build on audited merchant recovery with automatic reconciliation, correlated ope
 ## Current limits
 
 - Search and sorting operate on the loaded collection. All six demo products are included; Commerce.js catalog pagination and server-side full-catalog search remain future work.
-- The default local demo stores only the cart in the browser. Remote mode persists synthetic orders and Stripe test payments; it does not reserve stock, move real money, or synchronize customer accounts across devices.
-- Remote receipts are private to the guest cookie. Completed orders have a 30-day retention period; unresolved Stripe payments are retained for reconciliation. Clearing cookies removes guest access. This is not authenticated customer order history.
+- The default local demo stores only the cart in the browser. Remote mode persists synthetic orders and Stripe test payments; it does not reserve stock or move real money. Google shopper accounts provide cross-device order history when enabled with remote storage.
+- Guest receipts are private to the guest cookie; signed-in purchases also have private account receipts. Completed orders have a 30-day retention period; unresolved Stripe payments are retained for reconciliation. Clearing cookies removes guest access. Earlier guest orders are not imported into an account.
 - Live shipping and tax amounts come from Commerce.js; demo totals use the documented sample rules.
 - Remote submissions are idempotent per guest and request key, and one quote can create only one order. Stripe reconciliation verifies the stored session; independent new quotes are independent purchases.
 - The direct Stripe adapter accepts test secret keys only. A functioning merchant account and additional operational work are needed for real catalog, payment, and fulfillment behavior. Broader monitoring remains future work.

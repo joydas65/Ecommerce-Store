@@ -33,7 +33,7 @@ These GitHub repository **variables** are configured. They are identifiers rathe
 | `DEMO_ORDER_STORAGE` | `remote` for production; previews use `local` |
 | `PAYMENT_PROVIDER` | `stripe` for production; previews use simulation |
 | `MERCHANT_AUTH_ENABLED` | `true` for the merchant production release; previews use `false` |
-| `CUSTOMER_AUTH_ENABLED` | `false` until Google OAuth setup and release approval; must match the deployed customer feature flag |
+| `CUSTOMER_AUTH_ENABLED` | `true` for production; previews use `false`; must match the deployed customer feature flag |
 
 The Vercel project is connected to this GitHub repository with repository dispatch events enabled and production domain auto-assignment on. Native Deployment Checks require both of these GitHub checks for **production**:
 
@@ -144,7 +144,19 @@ The audit endpoint exposes only a bounded recent history and indicates when more
 
 ## Google accounts
 
-Status: implemented and locally verified; Google Cloud project/client registration and real deployed sign-in are pending approval. Follow [ADR 0010](decisions/0010-google-accounts.md) for the identity and ownership boundaries.
+Status on **5 November 2026**: Google shopper accounts are enabled in production and the real shopper flow has passed. Merchant GitHub sign-in remains working; explicit merchant Google linking and subsequent Google sign-in are deployed but their live acceptance is still pending. Follow [ADR 0010](decisions/0010-google-accounts.md) for the identity and ownership boundaries.
+
+The dedicated Google project `joys-store-auth-2026` is configured as **External / In production**, with only the non-sensitive `openid`, `email` and `profile` scopes. Its branding uses the canonical storefront homepage and public [privacy page](https://joys-store.vercel.app/privacy). Google initially associated an existing billing account during project creation; that association was removed immediately, and the console confirmed billing disabled with no linked account. OAuth credentials and the independent customer session secret are stored only in the backend production environment. Production storefront flags and its GitHub customer gate variable are enabled; previews remain disabled.
+
+Release evidence:
+
+- Backend `10bdc21df7fa3a81b175117cbf658858838b9f0e` passed [verification and production migrations](https://github.com/joydas65/Ecommerce-Orders/actions/runs/41991688391). The customer-auth Vercel rewrite is covered by routing regressions. After promotion, `/health` and `/api/customer-auth/ok` returned 200; anonymous `/v1/customer/session` returned 401.
+- Storefront `e95ebc94e305e7bd4b7ebc4d441b5db1380bd278` passed [CI](https://github.com/joydas65/Ecommerce-Store/actions/runs/41992225871): lint, 653 unit tests and 99 local browser tests. Its [deployed gate](https://github.com/joydas65/Ecommerce-Store/actions/runs/41992493394) passed all eight Stripe, merchant and customer checks. Both native Vercel gates succeeded before the production alias moved, and canonical `/api/health` returned that exact SHA with `seeded/stripe/remote` providers.
+- Real Google shopper sign-in opened an empty My orders list without importing earlier guest purchases. A new signed-in Notebook purchase totaling $18.36 completed with a Stripe sandbox card, appeared as paid in My orders and survived a full private receipt reload. Shopper sign-out then made the same account receipt redirect to sign-in. A fresh Google login restored the same paid order history. Real GitHub merchant sign-in after this release succeeded and showed the paid test order; shopper sign-out did not revoke that separate merchant session.
+- **Pending owner confirmation and live acceptance:** explicitly link Google from the approved merchant session, then verify merchant sign-out, subsequent Google sign-in and unchanged merchant identity. Do not treat the anonymous deployed gate or local fixtures as evidence for these external OAuth steps.
+- A post-release scan of both exact deployments returned zero runtime error/fatal records and zero HTTP 5xx request records in the preceding 30-minute window. This is a point-in-time observation, not ongoing alerting or an availability guarantee.
+
+For another environment or a repeat activation:
 
 1. Create a dedicated Google OAuth project/client for Joy's Store, with no billing account or paid services. Configure only basic OpenID identity, email and profile scopes. Register the exact callbacks `https://joys-store.vercel.app/api/customer-auth/callback/google` and `https://joys-store.vercel.app/api/auth/callback/google`. Do not reuse production callbacks in previews or register wildcard callbacks.
 2. Deploy the compatible backend and additive migrations `006_customer_accounts.sql` and `007_single_merchant_google.sql` through its gates. Configure backend-only `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `CUSTOMER_AUTH_SECRET` (random and independent of merchant/service secrets), `CUSTOMER_AUTH_URL=https://joys-store.vercel.app`, `CUSTOMER_AUTH_ENABLED=true` and `MERCHANT_GOOGLE_ENABLED=true`. Existing GitHub OAuth and its allowlist remain configured.
@@ -174,7 +186,7 @@ E2E_BASE_URL=https://<deployment-host>.vercel.app \
 E2E_EXPECTED_COMMIT_SHA=<full-commit-sha> \
 E2E_MODE=stripe \
 E2E_MERCHANT_ENABLED=true \
-E2E_CUSTOMER_ENABLED=false \
+E2E_CUSTOMER_ENABLED=true \
 E2E_ORDER_STORAGE=remote \
 npm run test:e2e:deployed
 ```
